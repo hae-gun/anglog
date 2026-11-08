@@ -31,7 +31,7 @@ export function LoginPage() {
     <div className="page">
       <section className="hero">
         <h1>우리 앵무의 하루를 기록하는 곳</h1>
-        <p>사진과 체중, 기분을 적으면 내 앵무가 사는 방이 조금씩 채워져요. 다른 집 방에도 놀러가서 깃털을 남길 수 있어요.</p>
+        <p>사진과 체중, 기분을 적으면 내 앵무가 사는 방이 조금씩 채워지고, 앵파크에 우리 집이 생겨요. 다른 집에 놀러가서 깃털도 남길 수 있어요.</p>
       </section>
 
       <form onSubmit={submit} className="page" style={{ padding: 0 }}>

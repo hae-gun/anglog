@@ -113,7 +113,7 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
           <button type="button" className="btn small" onClick={() => setV({ ...v, colors: SPECIES_COLORS[v.species] })}>종 기본색</button>
           <button type="button" className="btn small primary" onClick={() => setV({ ...v, colors: randomColors() })}>랜덤 색</button>
         </div>
-        <span className="hint">{compact ? '공원과 방에서 이 모습으로 돌아다녀요.' : '방 안의 3D 앵무도 이 색으로 보여요.'}</span>
+        <span className="hint">{compact ? '앵파크와 방에서 이 모습으로 돌아다녀요.' : '방 안의 3D 앵무도 이 색으로 보여요.'}</span>
       </div>
 
       {error && <p className="error" role="alert">{error}</p>}

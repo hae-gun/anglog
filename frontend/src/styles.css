@@ -1,4 +1,4 @@
-/* 짹로그: paper-and-sticker look carried over from the 3D prototype. One column, phone first. */
+/* 앵로그: paper-and-sticker look carried over from the 3D prototype. One column, phone first. */
 :root {
   --paper: #FFF8EC;
   --card: #FFFFFF;
@@ -270,21 +270,55 @@ img { max-width: 100%; display: block; }
   .play-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* park */
-.park-stage { background: #CFE8F2; }
-.park-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 380px) { .park-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* 앵파크 (full-screen game) */
+.app.game { padding: 0; max-width: none; min-height: 100dvh; }
+.park { position: fixed; inset: 0; overflow: hidden; background: #CFE3EE; user-select: none; -webkit-user-select: none; }
+.park-stage { position: absolute; inset: 0; }
+.park-top { position: absolute; z-index: 3; top: calc(8px + env(safe-area-inset-top, 0px)); left: 8px; right: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; pointer-events: none; }
+.park-top > * { pointer-events: auto; }
+.park-top .grow { flex: 1; pointer-events: none; }
+.park-brand { background: var(--seed); }
+.park-online { gap: 6px; font-size: 13px; }
+.park-online .dot { width: 8px; height: 8px; border-radius: 50%; background: #9A9A9A; }
+.park-online.online .dot { background: #3FB44A; box-shadow: 0 0 0 3px rgba(63, 180, 74, 0.25); }
+.park-online.connecting .dot { background: var(--seed); }
+.park-hint, .park-note { position: absolute; z-index: 2; left: 50%; transform: translateX(-50%); width: min(520px, calc(100% - 16px)); margin: 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.park-hint { top: calc(56px + env(safe-area-inset-top, 0px)); background: rgba(43, 38, 34, 0.8); color: var(--paper); pointer-events: none; }
+.park-note { top: calc(56px + env(safe-area-inset-top, 0px)); }
 .park-plate { position: absolute; left: 0; top: 0; white-space: nowrap; font: 12px/1 var(--display); padding: 4px 7px; border-radius: 6px; background: rgba(255, 248, 236, 0.92); color: var(--ink); border: 1.5px solid var(--ink); will-change: transform; }
 .park-plate.lit::after { content: '오늘 일기'; margin-left: 5px; padding: 1px 5px; border-radius: 4px; background: var(--seed); font-size: 10.5px; }
 .park-plate.mine { background: var(--seed); }
+.room-tag-live { background: #2F6FB0; }
+.park-controls { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; padding: 0 12px calc(14px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; pointer-events: none; }
+.park-controls > * { pointer-events: auto; }
+.stick { width: 118px; height: 118px; flex: none; border-radius: 50%; background: rgba(255, 248, 236, 0.35); border: 2px solid rgba(43, 38, 34, 0.55); display: grid; place-items: center; touch-action: none; }
+.stick-knob { width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 248, 236, 0.95); border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); pointer-events: none; }
+.park-buttons { display: grid; grid-template-columns: repeat(2, 76px); gap: 8px; }
+.pbtn { min-height: 46px; padding: 0 6px; border: 2px solid var(--ink); border-radius: 14px; background: rgba(255, 248, 236, 0.95); box-shadow: 2px 2px 0 var(--ink); font: 15px/1 var(--display); touch-action: manipulation; }
+.pbtn.fly { background: var(--seed); grid-column: span 2; min-height: 52px; font-size: 17px; }
+.pbtn.fly[aria-pressed='true'] { background: #CFE3F5; }
+.pbtn.small { min-height: 36px; font-size: 13px; }
+.pbtn:active { transform: translate(2px, 2px); box-shadow: none; }
+.park-pop { position: absolute; z-index: 4; left: 8px; right: 8px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 520px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 12px; background: rgba(255, 248, 236, 0.97); }
+.park-pop > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.park-pop b { font: 16px/1.1 var(--display); }
+.park-pop span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.park-invite { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(380px, calc(100% - 32px)); padding: 16px; border: 2px solid var(--ink); border-radius: 16px; background: var(--paper); box-shadow: var(--shadow); }
+.park-invite b { font: 19px/1.2 var(--display); }
+.park-invite p { margin: 8px 0 12px; font-size: 14px; }
+.park-toast { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
+.phrases { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.phrases .chip { min-height: 40px; font-size: 15px; }
+.owner-pitch { margin-top: 18px; padding: 12px; border: 2px dashed var(--ink); border-radius: 12px; background: #FFF1C9; }
+.owner-pitch p { margin: 6px 0 10px; font-size: 14px; }
+@media (min-width: 720px) {
+  .park-buttons { grid-template-columns: repeat(3, 84px); }
+  .pbtn.fly { grid-column: span 3; }
+}
 .sheet-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(43, 38, 34, 0.42); display: flex; align-items: flex-end; justify-content: center; }
 .sheet { position: relative; width: min(560px, 100%); max-height: 82dvh; overflow-y: auto; background: var(--paper); border: 2px solid var(--ink); border-bottom: 0; border-radius: 18px 18px 0 0; padding: 56px 16px calc(20px + env(safe-area-inset-bottom, 0px)); }
 .sheet .section-title:first-of-type { margin-top: 0; }
 .sheet-close { position: absolute; right: 10px; top: 10px; }
-.park-pop { position: absolute; z-index: 2; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 12px; background: rgba(255, 248, 236, 0.96); }
-.park-pop > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.park-pop b { font: 16px/1.1 var(--display); }
-.park-pop span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }

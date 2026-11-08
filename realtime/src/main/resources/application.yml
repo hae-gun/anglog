@@ -1,0 +1,38 @@
+server:
+  port: ${PORT:8090}
+  shutdown: graceful
+
+spring:
+  application:
+    name: anglog-realtime
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# 앵파크 realtime protocol: docs/park-realtime.md
+angpark:
+  protocol-version: 1
+  # browsers from other origins are refused at the handshake; set ANGPARK_ALLOWED_ORIGINS in production
+  allowed-origins: ${ANGPARK_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:4173}
+  channel-capacity: 50
+  presence-ms: 200
+  move-min-gap-ms: 150
+  heartbeat-ms: 10000
+  heartbeat-timeout-ms: 30000
+  hello-timeout-ms: 10000
+  max-connections-per-ip: 20
+  max-message-bytes: 2048
+  look-min-gap-ms: 2000
+  say-min-gap-ms: 1500
+  emote-min-gap-ms: 600
+  # must match PHRASES in frontend/src/lib/phrases.ts
+  phrase-count: 12
+  # optional: a file with one blocked word per line, kept out of git
+  blocked-words-file: ${ANGPARK_BLOCKED_WORDS_FILE:}

@@ -88,7 +88,7 @@ export function WritePage() {
 
   return (
     <form className="page" onSubmit={submit}>
-      <h1 className="page-title">오늘의 짹로그</h1>
+      <h1 className="page-title">오늘의 앵로그</h1>
 
       <div className="field">
         <span className="label">사진</span>

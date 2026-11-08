@@ -3,6 +3,12 @@ backend/build/
 backend/.gradle/
 backend/storage/
 backend/out/
+
+# realtime
+realtime/build/
+realtime/.gradle/
+realtime/out/
+blocked-words*.txt
 *.class
 
 # frontend

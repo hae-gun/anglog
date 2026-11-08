@@ -104,7 +104,7 @@ export function PlayPage() {
       <div className="play-stage" ref={stage} aria-label={`${r.owner.nickname}의 3D 방에서 노는 중. 바닥이나 횃대를 누르면 내 앵무가 이동해요.`}>
         <div className="play-top">
           <div className="row" style={{ gap: 6 }}>
-            <Link to={`/visit?at=${r.owner.handle}`} className="play-chip"><span aria-hidden="true">←</span> 공원</Link>
+            <Link to={`/park?at=${r.owner.handle}`} className="play-chip"><span aria-hidden="true">←</span> 앵파크</Link>
             <Link to={`/room/${r.owner.handle}`} className="play-chip">일기</Link>
           </div>
           <div className="row" style={{ gap: 6 }}>
@@ -123,7 +123,7 @@ export function PlayPage() {
         {!me_bird && (
           <p className="play-note">
             {me
-              ? <>{visitor.name}로 놀러왔어요. <Link to="/parrots/new">내 앵무를 등록</Link>하면 공원에 내 집도 생겨요.</>
+              ? <>{visitor.name}로 놀러왔어요. <Link to="/parrots/new">내 앵무를 등록</Link>하면 앵파크에 내 집도 생겨요.</>
               : <>로그인 없이 {visitor.name}로 놀러왔어요. <Link to="/login">로그인</Link>하면 깃털도 남길 수 있어요.</>}
           </p>
         )}
