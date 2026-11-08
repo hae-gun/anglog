@@ -15,6 +15,8 @@ import { useSession } from '../session';
 interface Controller {
   setInput(x: number, y: number): void;
   toggleFly(): boolean;
+  setView(v: 'third' | 'first'): 'third' | 'first';
+  swapBird(v: { name: string; colors: NetLook['colors']; species: NetLook['species'] }): void;
   setClimb(dir: number): void;
   isFlying(): boolean;
   chirp(): void;
@@ -37,6 +39,10 @@ type BirdPop = { handle: string | null; nickname: string | null; birdName: strin
 const PARK_HOUSES = 12;
 const INVITE_KEY = 'anglog-invite-seen';
 const INVITE_AFTER_MS = 3 * 60 * 1000;
+const BIRD_KEY = 'anglog-park-bird';
+const VIEW_KEY = 'anglog-park-view';
+const readKey = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+const writeKey = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 
 /** 앵파크: the autumn park game. Anyone can play without a login; bird owners are invited to 앵로그. */
 export function ParkPage() {
@@ -51,7 +57,7 @@ export function ParkPage() {
   const [rooms, setRooms] = useState<RoomCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guest, setGuest] = useState<GuestBird>(loadGuestBird);
-  const [sheet, setSheet] = useState<null | 'list' | 'dress' | 'say'>(null);
+  const [sheet, setSheet] = useState<null | 'list' | 'dress' | 'say' | 'birds'>(null);
   const [bird, setBird] = useState<BirdPop | null>(null);
   const [hint, setHint] = useState(true);
   const [muted, setMute] = useState(isMuted());
@@ -61,9 +67,18 @@ export function ParkPage() {
   const [status, setStatus] = useState<NetStatus | null>(null);
   const [online, setOnline] = useState(1);
   const [invite, setInvite] = useState(false);
+  const [birdId, setBirdId] = useState<number | null>(() => Number(readKey(BIRD_KEY)) || null);
+  const [view, setView] = useState<'third' | 'first'>(() => (readKey(VIEW_KEY) === 'first' ? 'first' : 'third'));
 
-  const myBird = parrots[0] ?? null;
+  // owners with several birds pick which one walks in the park
+  const myBird = parrots.find((p) => p.id === birdId) ?? parrots[0] ?? null;
   const visitor = myBird ?? guest;
+  const visitorRef = useRef(visitor);
+  visitorRef.current = visitor;
+  const visitorKey = `${visitor.name}|${visitor.species}|${visitor.colors.face}|${visitor.colors.head}|${visitor.colors.body}|${visitor.colors.wing}|${visitor.colors.tail}`;
+  const mountedKey = useRef('');
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const netLook: NetLook = { name: visitor.name, species: visitor.species, colors: visitor.colors, home: myBird && me ? me.handle : null };
   const lookRef = useRef(netLook);
   lookRef.current = netLook;
@@ -94,8 +109,9 @@ export function ParkPage() {
   useEffect(() => {
     if (!rooms || loading || !stage.current) return;
     try {
+      const v = visitorRef.current;
       const c = mountPark(stage.current, houses, {
-        visitor: { name: visitor.name, colors: visitor.colors, species: visitor.species },
+        visitor: { name: v.name, colors: v.colors, species: v.species },
         startAt: startAt.current,
         onEnter: (handle: string) => navigate(`/play/${handle}`),
         onBirdTap: (who: BirdPop) => setBird(who),
@@ -105,6 +121,8 @@ export function ParkPage() {
               : '앵로그에 우리 앵무를 등록하면 여기에 집이 생겨요.'),
       }) as unknown as Controller;
       ctl.current = c;
+      mountedKey.current = visitorKey;
+      if (viewRef.current === 'first') c.setView('first');
       others.current.forEach((p) => c.addRemote(p.pid, p.look, p));
     } catch {
       setBroken(true);
@@ -121,7 +139,15 @@ export function ParkPage() {
       ctl.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [houses, loading, visitor.name, visitor.colors.body, visitor.colors.head, visitor.colors.face, visitor.species]);
+  }, [houses, loading]);
+
+  // a different bird (switched, or the guest dressed up again) takes over on the spot, no reload
+  useEffect(() => {
+    if (!ctl.current || mountedKey.current === visitorKey) return;
+    mountedKey.current = visitorKey;
+    const v = visitorRef.current;
+    ctl.current.swapBird({ name: v.name, colors: v.colors, species: v.species });
+  }, [visitorKey]);
 
   // ---- other people, live
   const url = realtimeUrl();
@@ -171,7 +197,7 @@ export function ParkPage() {
   useEffect(() => {
     net.current?.setLook(lookRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visitor.name, visitor.colors.body, visitor.colors.head, visitor.colors.face, visitor.species, me?.handle]);
+  }, [visitorKey, me?.handle]);
 
   // ---- 앵집사님이세요? once, a few minutes into playing without a bird of my own
   useEffect(() => {
@@ -224,8 +250,18 @@ export function ParkPage() {
           </span>
         )}
         <span className="grow" />
+        {parrots.length > 1 && (
+          <button className="play-chip park-me" onClick={() => setSheet('birds')} aria-label={`앵무 바꾸기, 지금은 ${visitor.name}`}>
+            <span className="dot" style={{ background: visitor.colors.body }} aria-hidden="true" />{visitor.name}
+          </button>
+        )}
+        <button className="play-chip" aria-pressed={view === 'first'} onClick={() => {
+          const next = view === 'first' ? 'third' : 'first';
+          setView(next);
+          writeKey(VIEW_KEY, next);
+          ctl.current?.setView(next);
+        }} aria-label={view === 'first' ? '3인칭으로 바꾸기' : '1인칭으로 바꾸기'}>{view === 'first' ? '3인칭' : '1인칭'}</button>
         <button className="play-chip" onClick={() => { setMuted(!muted); setMute(!muted); }} aria-pressed={!muted}>{muted ? '소리 끔' : '소리 켬'}</button>
-        <button className="play-chip" onClick={() => setSheet('list')}>집 목록</button>
       </div>
 
       {error && hint && <p className="play-note park-note" role="alert">{error}</p>}
@@ -283,14 +319,31 @@ export function ParkPage() {
             ? <button className="pbtn small" onClick={() => { if (!ctl.current?.enter(me.handle)) navigate(`/play/${me.handle}`); }}>내 집</button>
             : <button className="pbtn small" onClick={() => setSheet('dress')}>꾸미기</button>}
           <button className="pbtn small" onClick={surf}>아무 집</button>
+          <button className="pbtn small" onClick={() => setSheet('list')}>집 목록</button>
         </div>
       </div>
 
       {sheet && (
         <div className="sheet-backdrop" onClick={() => setSheet(null)}>
           <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-            aria-label={sheet === 'list' ? '집 목록' : sheet === 'say' ? '말하기' : '앵무 꾸미기'}>
+            aria-label={sheet === 'list' ? '집 목록' : sheet === 'say' ? '말하기' : sheet === 'birds' ? '앵무 바꾸기' : '앵무 꾸미기'}>
             <button className="sheet-close btn ghost small" onClick={() => setSheet(null)}>닫기</button>
+
+            {sheet === 'birds' && (
+              <>
+                <h2 className="section-title">누구랑 놀까요?</h2>
+                <div className="bird-pick">
+                  {parrots.map((p) => (
+                    <button key={p.id} className="bird-pick-item" aria-pressed={p.id === myBird?.id}
+                      onClick={() => { setBirdId(p.id); writeKey(BIRD_KEY, String(p.id)); setSheet(null); }}>
+                      <BirdAvatar colors={p.colors} species={p.species} />
+                      <b>{p.name}</b>
+                      <span>{p.speciesLabel}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             {sheet === 'say' && (
               <>

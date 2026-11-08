@@ -16,7 +16,7 @@
   - 말은 정해진 문구 번호만(frontend/src/lib/phrases.ts와 angpark.phrase-count를 같이 바꿀 것). 이름과 모양은 LookRules가 조용히 고친다
 - frontend/ : Vite + React 18 + TS, react-router 6, three 0.128
   - src/api: types.ts(API 모양), http.ts(실서버), mock.ts(가짜 서버, `npm run dev:mock`)
-  - src/room3d: 3D 방과 앵무 모델 (plain JS). scene.js 방 꾸밈, room.js 프로필 방, play.js 방에서 놀기, park.js 앵파크(3인칭, 가을 공원)
+  - src/room3d: 3D 방과 앵무 모델 (plain JS). scene.js 방 꾸밈, room.js 프로필 방, play.js 방에서 놀기, park.js 앵파크(가을 공원. 3인칭은 걸으면 카메라가 등 뒤로 따라 돌고, 버튼으로 1인칭 전환)
   - src/lib/parkNet.ts: 앵파크 실시간 클라이언트. VITE_REALTIME_URL이 없으면 dev에서는 ws://localhost:8090/ws, 가짜 서버 모드와 운영에서는 혼자 노는 모드
   - /park는 전체 화면 게임(헤더와 하단 메뉴 없음). 로그인 안 한 사람이 처음 오면 /에서 /park로 보낸다
   - 3D 페이지는 lazy import (three.js를 열 때만 받음)

@@ -299,6 +299,13 @@ img { max-width: 100%; display: block; }
 .pbtn.fly[aria-pressed='true'] { background: #CFE3F5; }
 .pbtn.small { min-height: 36px; font-size: 13px; }
 .pbtn:active { transform: translate(2px, 2px); box-shadow: none; }
+.park-me { gap: 6px; }
+.park-me .dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--ink); }
+.bird-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.bird-pick-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 8px; border: 2px solid var(--ink); border-radius: 14px; background: var(--paper); font: inherit; }
+.bird-pick-item[aria-pressed='true'] { background: var(--seed); }
+.bird-pick-item svg { width: 64px; height: 64px; }
+.bird-pick-item span { font-size: 12.5px; color: var(--muted); }
 .park-climb { position: absolute; z-index: 3; right: 12px; bottom: calc(232px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; }
 .park-climb .pbtn { width: 76px; min-height: 44px; background: #CFE3F5; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .park-pop { position: absolute; z-index: 4; left: 8px; right: 8px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 520px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 12px; background: rgba(255, 248, 236, 0.97); }

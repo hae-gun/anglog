@@ -909,6 +909,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   const pb = makeBird(visitor.colors, visitor.species);
   scene.add(pb.group);
   const player = actor(pb, visitor.name, { isPlayer: true });
+  let view = 'third'; // 'third': camera behind and following, 'first': through the bird's eyes
+  let manualUntil = 0; // a drag pauses the follow camera for a moment
   let flying = false;
   let landing = false;
 
@@ -1079,7 +1081,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     // a little wider on tall phones so the bird does not fill the screen
-    camera.fov = w / h < 0.7 ? 58 : 50;
+    camera.fov = view === 'first' ? (w / h < 0.7 ? 75 : 65) : w / h < 0.7 ? 58 : 50;
     camera.updateProjectionMatrix();
   }
   const ro = new ResizeObserver(resize);
@@ -1090,7 +1092,27 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   const camDir = new THREE.Vector3();
   let camLift = 0; // extra pitch while something blocks the usual view
   let camReach = 9; // how far the camera can actually sit before a tree or house gets in the way
-  function stepCamera(dt, snap) {
+  const yawBehind = (r) => Math.atan2(-Math.cos(r), Math.sin(r));
+  const rotForYaw = (yaw) => Math.atan2(Math.cos(yaw), -Math.sin(yaw));
+  let fpPitch = 0;
+  function stepCamera(dt, snap, moving) {
+    // third person: while the bird moves, the camera swings round behind it (a drag pauses this)
+    if (view === 'third' && moving && clock > manualUntil && !entering) {
+      cam.yawT = lerpAngle(cam.yawT, yawBehind(player.b.group.rotation.y), 1 - Math.exp(-dt * 1.6));
+    }
+    if (view === 'first') {
+      const k = snap ? 1 : 1 - Math.exp(-dt * 12);
+      cam.yaw = lerpAngle(cam.yaw, cam.yawT, k);
+      const s = player.b.group.scale.x || 1;
+      const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
+      camera.position.set(player.pos.x + fx * 0.3 * s, player.pos.y + 0.95 * s, player.pos.z + fz * 0.3 * s);
+      look.copy(camera.position);
+      const cp = Math.cos(fpPitch);
+      camera.lookAt(camera.position.x + fx * cp, camera.position.y + Math.sin(fpPitch), camera.position.z + fz * cp);
+      sun.position.set(look.x + 10, look.y + 22, look.z - 8);
+      sun.target.position.set(look.x, 0, look.z);
+      return;
+    }
     const k = snap ? 1 : 1 - Math.exp(-dt * 10);
     cam.yaw = lerpAngle(cam.yaw, cam.yawT, k);
     cam.pitch += (cam.pitchT - cam.pitch) * k;
@@ -1194,7 +1216,9 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 9) drag.moved = true;
     if (!drag.moved) return;
     cam.yawT -= ((e.clientX - drag.x) / Math.max(w, 1)) * Math.PI * 1.6;
-    cam.pitchT = clamp(cam.pitchT + ((e.clientY - drag.y) / Math.max(h, 1)) * 1.8, 0.08, 1.3);
+    if (view === 'first') fpPitch = clamp(fpPitch + ((e.clientY - drag.y) / Math.max(h, 1)) * 1.6, -0.9, 0.9);
+    else cam.pitchT = clamp(cam.pitchT + ((e.clientY - drag.y) / Math.max(h, 1)) * 1.8, 0.08, 1.3);
+    manualUntil = clock + 2;
     drag.x = e.clientX;
     drag.y = e.clientY;
   };
@@ -1533,7 +1557,12 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       if (s.life <= 0) { scene.remove(s.m); s.m.geometry.dispose(); s.m.material.dispose(); sparks.splice(i, 1); }
     }
 
-    stepCamera(dt, false);
+    if (view === 'first') {
+      // through the bird's eyes: the bird turns with the view, and is not drawn
+      player.b.group.visible = false;
+      if (!player.move && !steering && !entering) player.rotTarget = rotForYaw(cam.yaw);
+    }
+    stepCamera(dt, false, steering || !!player.move);
     marker.material.opacity = Math.max(0, 0.8 - (clock - markerT) * 1.4);
     marker.scale.setScalar(1 + (clock - markerT) * 0.8);
     dome.position.copy(camera.position);
@@ -1542,6 +1571,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     houses.forEach((hh) => place(hh.plate, hh.top, 0.2, 34));
     actors.forEach((a) => {
       const show = (a.isPlayer || a.pos.distanceTo(player.pos) < 7 || a.bubbleUntil > clock) && a.b.group.visible;
+      if (a.isPlayer && view === 'first') { a.tagEl.hidden = true; a.bubbleEl.hidden = true; return; }
       a.tagEl.hidden = !show || a.scale < 0.5;
       if (show) place(a.tagEl, a.pos, 1.4, 40);
       if (!a.bubbleEl.hidden) place(a.bubbleEl, a.pos, 1.4, 40);
@@ -1663,6 +1693,38 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       const a = remotes.get(pid);
       if (a) say(a, text, 2.6);
     },
+    /** 'third' (camera behind, following) or 'first' (through the bird's eyes). */
+    setView(next) {
+      view = next === 'first' ? 'first' : 'third';
+      if (view === 'first') {
+        cam.yaw = cam.yawT = yawBehind(player.b.group.rotation.y);
+        fpPitch = 0;
+      } else {
+        player.b.group.visible = true;
+        cam.yaw = cam.yawT = yawBehind(player.b.group.rotation.y);
+      }
+      resize();
+      stepCamera(0, true, false);
+      return view;
+    },
+    /** Become another bird on the spot (owners with several birds). */
+    swapBird(v) {
+      const old = player.b;
+      const nb = makeBird(v.colors, v.species);
+      nb.group.position.copy(old.group.position);
+      nb.group.rotation.y = old.group.rotation.y;
+      nb.group.visible = view !== 'first';
+      scene.remove(old.group);
+      old.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      scene.add(nb.group);
+      player.b = nb;
+      player.pos = nb.group.position;
+      player.name = v.name;
+      player.tagEl.textContent = v.name;
+      hearts(player.pos.clone());
+      say(player, `${v.name} 차례!`, 1.6);
+      playCall('chirp', 1.1, 0.8);
+    },
     /** Tests only (mock builds): put the bird somewhere and turn the camera. */
     debugTeleport(x, z, yaw, pitch) {
       player.move = null;
@@ -1670,7 +1732,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       player.pos.set(x, 0, z);
       cam.yaw = cam.yawT = yaw;
       if (pitch != null) cam.pitch = cam.pitchT = pitch;
-      stepCamera(0, true);
+      manualUntil = clock + 3;
+      stepCamera(0, true, false);
     },
     dispose() {
       cancelAnimationFrame(raf);
