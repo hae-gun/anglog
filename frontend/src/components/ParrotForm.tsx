@@ -41,7 +41,8 @@ function randomColors(): ParrotColors {
   };
 }
 
-export function ParrotForm({ initial, submitLabel, onSubmit }: { initial?: ParrotInput; submitLabel: string; onSubmit: (v: ParrotInput) => Promise<void> }) {
+/** compact: name, species and colors only (the guest bird in the park). */
+export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: { initial?: ParrotInput; submitLabel: string; onSubmit: (v: ParrotInput) => Promise<void>; compact?: boolean }) {
   const [v, setV] = useState<ParrotInput>(
     initial ?? { name: '', species: 'LOVEBIRD', birthDate: null, adoptedDate: null, colors: SPECIES_COLORS.LOVEBIRD },
   );
@@ -87,7 +88,7 @@ export function ParrotForm({ initial, submitLabel, onSubmit }: { initial?: Parro
         </div>
       </div>
 
-      <div className="row">
+      {!compact && <div className="row">
         <div className="field">
           <label htmlFor="adopted">입양일</label>
           <input id="adopted" type="date" className="input" max={today} value={v.adoptedDate ?? ''} onChange={(e) => setV({ ...v, adoptedDate: e.target.value || null })} />
@@ -96,7 +97,7 @@ export function ParrotForm({ initial, submitLabel, onSubmit }: { initial?: Parro
           <label htmlFor="birth">생일 (알면)</label>
           <input id="birth" type="date" className="input" max={today} value={v.birthDate ?? ''} onChange={(e) => setV({ ...v, birthDate: e.target.value || null })} />
         </div>
-      </div>
+      </div>}
 
       <div className="field">
         <span className="label">색</span>
@@ -112,7 +113,7 @@ export function ParrotForm({ initial, submitLabel, onSubmit }: { initial?: Parro
           <button type="button" className="btn small" onClick={() => setV({ ...v, colors: SPECIES_COLORS[v.species] })}>종 기본색</button>
           <button type="button" className="btn small primary" onClick={() => setV({ ...v, colors: randomColors() })}>랜덤 색</button>
         </div>
-        <span className="hint">방 안의 3D 앵무도 이 색으로 보여요.</span>
+        <span className="hint">{compact ? '공원과 방에서 이 모습으로 돌아다녀요.' : '방 안의 3D 앵무도 이 색으로 보여요.'}</span>
       </div>
 
       {error && <p className="error" role="alert">{error}</p>}

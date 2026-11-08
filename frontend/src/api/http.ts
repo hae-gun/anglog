@@ -1,4 +1,4 @@
-import { Api, ApiError, Comment, FeedTab, GuestbookEntry, NewPost, Page, Parrot, ParrotInput, Post, Room, UserSummary } from './types';
+import { Api, ApiError, Comment, FeedTab, GuestbookEntry, NewPost, Page, Parrot, ParrotInput, Post, Room, RoomCard, UserSummary } from './types';
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, credentials: 'same-origin', headers: {} };
@@ -62,4 +62,7 @@ export const httpApi: Api = {
   guestbook: (handle, cursor) => request<Page<GuestbookEntry>>('GET', `/api/rooms/${handle}/guestbook${q({ cursor })}`),
   writeGuestbook: (handle, body) => request('POST', `/api/rooms/${handle}/guestbook`, { body }),
   deleteGuestbook: (id) => request('DELETE', `/api/guestbook/${id}`),
+
+  exploreRooms: () => request<RoomCard[]>('GET', '/api/explore/rooms'),
+  randomRoom: (exclude) => request<{ handle: string } | undefined>('GET', `/api/explore/random${q({ exclude })}`).then((r) => r?.handle ?? null),
 };

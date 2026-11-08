@@ -9,6 +9,9 @@ export const PlusIcon = () => (
 export const RoomIcon = () => (
   <svg viewBox="0 0 24 24" {...base}><path d="M4 20V8l8-4 8 4v12" /><path d="M4 20h16" /><rect x="9" y="11" width="6" height="5" /></svg>
 );
+export const VisitIcon = () => (
+  <svg viewBox="0 0 24 24" {...base}><path d="M4 18c3-6 7-9 13-10" /><path d="M13 5l4 3-3 4" /><circle cx="6" cy="19" r="2" /></svg>
+);
 export const HeartIcon = () => (
   <svg viewBox="0 0 24 24" {...base}><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" /></svg>
 );

@@ -131,10 +131,47 @@ export function makeBird(colors, species) {
     inner.scale.set(1, 1, 1);
     head.position.set(0.28, 0.78, 0);
     head.rotation.set(0, 0, 0);
-    wings.forEach((w) => { w.rotation.set(0, 0, 0.35); });
+    beak.scale.set(1, 1, 1);
+    wings.forEach((w) => { w.rotation.set(0, 0, 0.35); w.position.y = 0.5; });
     let eyeY = tt % 4.2 < 0.13 ? 0.15 : 1;
     if (head.userData.crest) head.userData.crest.rotation.z = 0;
     switch (mood) {
+      case 'WALK':
+        inner.position.y = Math.abs(Math.sin(tt * 13)) * 0.1;
+        inner.rotation.z = -0.08;
+        head.rotation.z = Math.sin(tt * 13) * 0.06;
+        break;
+      case 'FLY': {
+        const f = Math.sin(tt * 26);
+        wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * (0.7 + f * 0.7); w.position.y = 0.62; });
+        inner.rotation.z = 0.12;
+        break;
+      }
+      case 'DANCE': {
+        const k = Math.sin(tt * 9);
+        inner.position.y = Math.abs(k) * 0.22;
+        inner.rotation.y = Math.sin(tt * 4.5) * 0.5;
+        head.rotation.z = 0.2 + k * 0.2;
+        wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * Math.max(0, k) * 0.9; });
+        if (head.userData.crest) head.userData.crest.rotation.z = -0.5;
+        break;
+      }
+      case 'PREEN':
+        head.rotation.y = -0.9;
+        head.rotation.z = -0.3 + Math.sin(tt * 10) * 0.14;
+        head.position.x = 0.34;
+        break;
+      case 'PREENED':
+        head.rotation.z = -0.35;
+        inner.scale.set(1.08, 1.04, 1.08);
+        eyeY = 0.15;
+        break;
+      case 'CHIRP': {
+        head.rotation.z = 0.45 + Math.sin(tt * 22) * 0.06;
+        beak.scale.set(1, 1.35, 1.35);
+        wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * 0.3; });
+        break;
+      }
       case 'SLEEPY':
         head.position.set(0.24, 0.7, 0);
         head.rotation.z = -0.4;

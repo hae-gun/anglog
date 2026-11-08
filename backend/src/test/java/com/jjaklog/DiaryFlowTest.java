@@ -55,8 +55,9 @@ class DiaryFlowTest {
                 .andReturn()).get("id").asLong();
 
         // She posts a diary with a big photo, a weight and a mood. The photo is shrunk to 1600px.
-        long postId = json(mvc.perform(multipart("/api/posts").session(alice)
+        long postId = json(mvc.perform(multipart("/api/posts")
                         .file(new MockMultipartFile("images", "morning.png", "image/png", png(2000, 1000)))
+                        .session(alice)
                         .param("body", "오늘 아침 종이를 세 장 찢었다")
                         .param("parrotId", String.valueOf(parrotId))
                         .param("weightG", "52.5")
@@ -123,6 +124,27 @@ class DiaryFlowTest {
         mvc.perform(get("/api/rooms/alice/guestbook"))
                 .andExpect(jsonPath("$.items[0].body").value("머란이 안녕! 보리가 다녀가요"))
                 .andExpect(jsonPath("$.items[0].canDelete").value(false));
+
+        // The visit tab lists Alice's room for Bob (followed, already visited today), and a random visit finds it.
+        mvc.perform(get("/api/explore/rooms").session(bob))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].owner.handle").value("alice"))
+                .andExpect(jsonPath("$[0].following").value(true))
+                .andExpect(jsonPath("$[0].featherLeftToday").value(true))
+                .andExpect(jsonPath("$[0].postedToday").value(true))
+                .andExpect(jsonPath("$[0].parrots[0].name").value("머란이"))
+                .andExpect(jsonPath("$[0].coverImageUrl").isNotEmpty());
+        // A guest can look around the park too.
+        mvc.perform(get("/api/explore/rooms"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].owner.handle").value("alice"))
+                .andExpect(jsonPath("$[0].following").value(false));
+        mvc.perform(get("/api/explore/random").session(bob))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.handle").value("alice"));
+        // Alice is the only one with a bird, so there is no other room for her.
+        mvc.perform(get("/api/explore/random").session(alice))
+                .andExpect(status().isNoContent());
 
         // Writing needs a login; only the author can delete.
         mvc.perform(multipart("/api/posts").param("body", "익명"))

@@ -1,5 +1,6 @@
 package com.jjaklog.social;
 
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,9 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
     long countByFolloweeId(Long followeeId);
 
     long countByFollowerId(Long followerId);
+
+    @Query("select f.followeeId from Follow f where f.followerId = :me")
+    List<Long> followeeIds(@Param("me") Long me);
 
     @Modifying
     @Query("delete from Follow f where f.followerId = :followerId and f.followeeId = :followeeId")

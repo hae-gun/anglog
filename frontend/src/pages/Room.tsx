@@ -151,9 +151,12 @@ export function RoomPage() {
         </div>
       )}
 
+      <Link className="btn primary block" to={`/play/${r.owner.handle}`}>
+        {isMe ? '내 방에서 놀기' : `${r.parrots[0]?.name ?? r.owner.nickname}네 놀러가기`}
+      </Link>
       {!isMe && (
         <button className="btn leaf block" onClick={leaveFeather} disabled={r.relation.featherLeftToday}>
-          <FeatherIcon /> {r.relation.featherLeftToday ? '오늘은 깃털을 남겼어요' : '놀러온 흔적으로 깃털 남기기'}
+          <FeatherIcon /> {r.relation.featherLeftToday ? '오늘은 깃털을 남겼어요' : '깃털만 남기고 가기'}
         </button>
       )}
       {isMe && r.stats.postCount === 0 && (

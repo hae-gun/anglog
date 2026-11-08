@@ -69,7 +69,7 @@ img { max-width: 100%; display: block; }
   max-width: 560px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .navlink {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
@@ -235,6 +235,56 @@ img { max-width: 100%; display: block; }
 .hero p { margin: 0; color: var(--muted); }
 .notice { font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--line); padding-left: 10px; }
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 20; background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 12px; font: 15px/1.3 var(--display); max-width: calc(100% - 32px); text-align: center; }
+
+/* visit tab */
+.visit-hero { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 2px solid var(--ink); border-radius: var(--radius); background: var(--leaf-soft); box-shadow: var(--shadow); }
+.room-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.room-card { display: flex; flex-direction: column; border: 2px solid var(--ink); border-radius: var(--radius); background: var(--card); overflow: hidden; box-shadow: var(--shadow); min-width: 0; }
+.room-card-cover { position: relative; display: block; aspect-ratio: 1; background: var(--sky); border-bottom: 2px solid var(--ink); }
+.room-card-cover img, .room-card-cover svg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.room-card-flag { position: absolute; left: 6px; top: 6px; font: 12px/1 var(--display); background: var(--ink); color: var(--paper); padding: 4px 7px; border-radius: 6px; }
+.room-card-body { display: flex; flex-direction: column; gap: 3px; padding: 10px; min-width: 0; }
+.room-card-name { font: 16px/1.2 var(--display); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-card-birds { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-card-time { font-size: 12px; color: var(--muted); }
+.room-card .btn { margin-top: 6px; }
+
+/* play */
+.play { display: flex; flex-direction: column; gap: 10px; padding: 10px max(10px, env(safe-area-inset-right, 0px)) 12px max(10px, env(safe-area-inset-left, 0px)); }
+.play-stage { position: relative; height: calc(100dvh - 205px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); min-height: 340px; border: 2px solid var(--ink); border-radius: var(--radius); overflow: hidden; background: #EFE6D6; box-shadow: var(--shadow); }
+.play-top { position: absolute; z-index: 2; left: 8px; right: 8px; top: 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; flex-wrap: wrap; pointer-events: none; }
+.play-top > * { pointer-events: auto; }
+.play-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 11px; border: 2px solid var(--ink); border-radius: 999px; background: rgba(255, 248, 236, 0.92); font: 14px/1 var(--display); text-decoration: none; }
+.play-chip.strong { background: var(--seed); }
+.play-chip:disabled { opacity: 0.6; }
+.play-hint, .play-note { position: absolute; z-index: 2; left: 8px; right: 8px; margin: 0; padding: 8px 10px; border-radius: 10px; font-size: 13px; line-height: 1.45; background: rgba(43, 38, 34, 0.82); color: var(--paper); pointer-events: none; }
+.play-hint { bottom: 8px; }
+.play-note { top: 56px; background: rgba(255, 248, 236, 0.94); color: var(--ink); border: 1.5px solid var(--ink); pointer-events: auto; }
+.play-note a { font-family: var(--display); }
+.play-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.play-actions .btn { padding: 0 6px; font-size: 15px; min-width: 0; }
+.play-birds { justify-content: center; }
+.room-tag-me { background: var(--seed); color: var(--ink); border: 1.5px solid var(--ink); }
+.room-bubble { position: absolute; left: 0; top: 0; margin-top: -30px; white-space: nowrap; font: 14px/1.2 var(--display); padding: 5px 9px; border-radius: 12px; background: var(--card); color: var(--ink); border: 2px solid var(--ink); will-change: transform; }
+@media (max-width: 380px) {
+  .play-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* park */
+.park-stage { background: #CFE8F2; }
+.park-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 380px) { .park-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.park-plate { position: absolute; left: 0; top: 0; white-space: nowrap; font: 12px/1 var(--display); padding: 4px 7px; border-radius: 6px; background: rgba(255, 248, 236, 0.92); color: var(--ink); border: 1.5px solid var(--ink); will-change: transform; }
+.park-plate.lit::after { content: '오늘 일기'; margin-left: 5px; padding: 1px 5px; border-radius: 4px; background: var(--seed); font-size: 10.5px; }
+.park-plate.mine { background: var(--seed); }
+.sheet-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(43, 38, 34, 0.42); display: flex; align-items: flex-end; justify-content: center; }
+.sheet { position: relative; width: min(560px, 100%); max-height: 82dvh; overflow-y: auto; background: var(--paper); border: 2px solid var(--ink); border-bottom: 0; border-radius: 18px 18px 0 0; padding: 56px 16px calc(20px + env(safe-area-inset-bottom, 0px)); }
+.sheet .section-title:first-of-type { margin-top: 0; }
+.sheet-close { position: absolute; right: 10px; top: 10px; }
+.park-pop { position: absolute; z-index: 2; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 12px; background: rgba(255, 248, 236, 0.96); }
+.park-pop > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.park-pop b { font: 16px/1.1 var(--display); }
+.park-pop span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }

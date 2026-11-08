@@ -110,6 +110,17 @@ export interface Room {
   feathers: { color: string; visitorHandle: string | null; visitDate: string }[];
 }
 
+export interface RoomCard {
+  owner: UserSummary;
+  parrots: Parrot[];
+  coverImageUrl: string | null;
+  latestPostAt: string | null;
+  /** the owner wrote a diary today (Korea time): the house window is lit */
+  postedToday: boolean;
+  following: boolean;
+  featherLeftToday: boolean;
+}
+
 export type FeedTab = 'latest' | 'following';
 
 export interface Api {
@@ -139,6 +150,10 @@ export interface Api {
   guestbook(handle: string, cursor?: number | null): Promise<Page<GuestbookEntry>>;
   writeGuestbook(handle: string, body: string): Promise<GuestbookEntry>;
   deleteGuestbook(id: number): Promise<void>;
+
+  exploreRooms(): Promise<RoomCard[]>;
+  /** null when there is no other room yet */
+  randomRoom(exclude?: string | null): Promise<string | null>;
 }
 
 export class ApiError extends Error {

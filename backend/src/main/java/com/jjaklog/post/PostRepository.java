@@ -1,6 +1,7 @@
 package com.jjaklog.post;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,14 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     List<Post> byAuthor(@Param("authorId") Long authorId, @Param("cursor") long cursor, Pageable page);
 
     long countByAuthorId(Long authorId);
+
+    /** Authors ordered by their latest diary. */
+    @Query("select p.authorId from Post p group by p.authorId order by max(p.id) desc")
+    List<Long> recentAuthorIds(Pageable page);
+
+    /** [authorId, latest createdAt] for each author in the list. */
+    @Query("select p.authorId, max(p.createdAt) from Post p where p.authorId in :ids group by p.authorId")
+    List<Object[]> latestPostTimes(@Param("ids") Collection<Long> ids);
 
     @Query("select p.createdAt from Post p where p.authorId = :authorId and p.createdAt >= :since")
     List<Instant> postTimesSince(@Param("authorId") Long authorId, @Param("since") Instant since);

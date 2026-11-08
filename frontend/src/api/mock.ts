@@ -4,7 +4,7 @@
 
 import {
   Api, ApiError, Comment, FeedTab, GuestbookEntry, Mood, MOODS, NewPost, Page, Parrot, ParrotInput,
-  Post, Room, SPECIES, UserSummary,
+  Post, Room, RoomCard, SPECIES, UserSummary,
 } from './types';
 
 interface DbPost {
@@ -81,6 +81,10 @@ function seed() {
   const haruBird = bird(haru.id, '하루', 'LOVEBIRD', { face: '#F2784B', head: '#E0473A', body: '#5DBB4A', wing: '#4A9A3B', tail: '#4A9A3B' }, '2025-03-14', null);
   const boriBird = bird(bori.id, '보리', 'QUAKER', { face: '#C9CFC4', head: '#B8C0B4', body: '#7DBB5A', wing: '#5E9A44', tail: '#5E9A44' }, '2024-08-02', '2024-05-20');
   const kongiBird = bird(kongi.id, '콩이', 'COCKATIEL', { face: '#F5E06A', head: '#F2D64A', body: '#B9B6B0', wing: '#8F8C87', tail: '#8F8C87' }, '2023-11-08', null);
+  // neighbours who only registered a bird so far, so the park has a few more houses
+  bird(mk('mango', '망고네').id, '망고', 'BUDGIE', { face: '#F5E06A', head: '#F2D64A', body: '#6CC24A', wing: '#3E5E2E', tail: '#2E5E8E' }, '2025-09-01', null);
+  bird(mk('dubu', '두부네').id, '두부', 'LOVEBIRD', { face: '#F2A65A', head: '#F2D64A', body: '#F7EDB0', wing: '#EFE2A0', tail: '#EFE2A0' }, '2025-06-11', null);
+  bird(mk('sora', '소라네').id, '소라', 'GREEN_CHEEKED_CONURE', { face: '#5DA84A', head: '#4A4038', body: '#5DA84A', wing: '#3E7E34', tail: '#A0302A' }, '2024-12-24', null);
 
   const add = (author: UserSummary, p: Parrot, body: string, day: number, weight: number | null, mood: Mood | null, scenes: ('perch' | 'bath' | 'sleep' | 'paper')[], bg: string) => {
     posts.push({
@@ -333,5 +337,31 @@ export const mockApi: Api = {
     const i = guestbook.findIndex((g) => g.id === id);
     if (i >= 0) guestbook.splice(i, 1);
     return wait(undefined);
+  },
+
+  async exploreRooms(): Promise<RoomCard[]> {
+    seed();
+    const today = seoulDay(now());
+    const owners = users.filter((u) => u.id !== meId && parrots.some((p) => p.ownerId === u.id));
+    const lastPost = (id: number) => posts.filter((p) => p.authorId === id).sort((a, b) => b.id - a.id)[0];
+    const followed = (id: number) => meId != null && follows.has(`${meId}>${id}`);
+    owners.sort((a, b) => Number(followed(b.id)) - Number(followed(a.id)) || (lastPost(b.id)?.id ?? 0) - (lastPost(a.id)?.id ?? 0));
+    return wait(owners.map((u) => {
+      const withPhoto = posts.filter((p) => p.authorId === u.id && p.images.length).sort((a, b) => b.id - a.id)[0];
+      return {
+        owner: u,
+        parrots: parrots.filter((p) => p.ownerId === u.id).map(strip),
+        coverImageUrl: withPhoto ? withPhoto.images[0].url : null,
+        latestPostAt: lastPost(u.id)?.createdAt ?? null,
+        postedToday: !!lastPost(u.id) && seoulDay(lastPost(u.id)!.createdAt) === today,
+        following: followed(u.id),
+        featherLeftToday: meId != null && feathers.some((f) => f.ownerId === u.id && f.visitorId === meId && f.day === today),
+      };
+    }));
+  },
+  async randomRoom(exclude) {
+    seed();
+    const pool = users.filter((u) => u.id !== meId && u.handle !== exclude && parrots.some((p) => p.ownerId === u.id));
+    return wait(pool.length ? pool[Math.floor(Math.random() * pool.length)].handle : null);
   },
 };
