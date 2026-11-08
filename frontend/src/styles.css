@@ -299,6 +299,8 @@ img { max-width: 100%; display: block; }
 .pbtn.fly[aria-pressed='true'] { background: #CFE3F5; }
 .pbtn.small { min-height: 36px; font-size: 13px; }
 .pbtn:active { transform: translate(2px, 2px); box-shadow: none; }
+.park-climb { position: absolute; z-index: 3; right: 12px; bottom: calc(232px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; }
+.park-climb .pbtn { width: 76px; min-height: 44px; background: #CFE3F5; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .park-pop { position: absolute; z-index: 4; left: 8px; right: 8px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 520px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 12px; background: rgba(255, 248, 236, 0.97); }
 .park-pop > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .park-pop b { font: 16px/1.1 var(--display); }

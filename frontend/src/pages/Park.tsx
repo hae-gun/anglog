@@ -15,6 +15,7 @@ import { useSession } from '../session';
 interface Controller {
   setInput(x: number, y: number): void;
   toggleFly(): boolean;
+  setClimb(dir: number): void;
   isFlying(): boolean;
   chirp(): void;
   say(text: string): void;
@@ -71,7 +72,12 @@ export function ParkPage() {
     let alive = true;
     api.exploreRooms()
       .then((r) => alive && setRooms(r))
-      .catch((e) => alive && setError(e instanceof Error ? e.message : '앵파크를 불러오지 못했어요.'));
+      .catch(() => {
+        // the park still opens without the diary API: empty lots, AI-less, but playable
+        if (!alive) return;
+        setRooms([]);
+        setError('이웃집을 불러오지 못했어요. 공원에서는 그대로 놀 수 있어요.');
+      });
     return () => { alive = false; };
   }, [me?.id]);
 
@@ -222,11 +228,11 @@ export function ParkPage() {
         <button className="play-chip" onClick={() => setSheet('list')}>집 목록</button>
       </div>
 
-      {error && <p className="play-note park-note" role="alert">{error}</p>}
+      {error && hint && <p className="play-note park-note" role="alert">{error}</p>}
       {broken && <p className="play-note park-note">이 기기에서는 3D 앵파크를 열 수 없어요. 집 목록으로 놀러가 주세요.</p>}
       {!rooms && !error && <p className="park-hint">앵파크 문 여는 중</p>}
       {rooms && hint && !broken && !bird && (
-        <p className="park-hint">조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 둘러봐요. 날기로 날아오르고, 집 문을 누르면 들어가요.</p>
+        <p className="park-hint">조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 둘러봐요. 날기로 날아올라 위로, 아래로 높이를 바꾸고, 집 문을 누르면 들어가요.</p>
       )}
 
       {bird && (
@@ -248,6 +254,18 @@ export function ParkPage() {
             <Link className="btn small primary" to={joinHref}>앵로그 시작하기</Link>
             <button className="btn small" onClick={() => setInvite(false)}>계속 놀기</button>
           </div>
+        </div>
+      )}
+
+      {flying && (
+        <div className="park-climb" role="group" aria-label="높이">
+          {[[1, '위로'], [-1, '아래로']].map(([dir, label]) => (
+            <button key={label} className="pbtn"
+              onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); ctl.current?.setClimb(dir as number); }}
+              onPointerUp={() => ctl.current?.setClimb(0)}
+              onPointerCancel={() => ctl.current?.setClimb(0)}
+              onContextMenu={(e) => e.preventDefault()}>{label}</button>
+          ))}
         </div>
       )}
 

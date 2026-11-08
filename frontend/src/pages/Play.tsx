@@ -45,7 +45,9 @@ export function PlayPage() {
   useEffect(() => {
     if (!room || !stage.current || loading) return;
     try {
-      ctl.current = mountPlay(stage.current, room, {
+      // in my own house I am one of my birds, so that bird is not also sitting on the perch
+      const scene = room.relation.isMe && me_bird ? { ...room, parrots: room.parrots.filter((p) => p.id !== me_bird.id) } : room;
+      ctl.current = mountPlay(stage.current, scene, {
         visitor: { name: visitor.name, colors: visitor.colors, species: visitor.species },
         onFrameTap: (postId: number) => navigate(`/post/${postId}`),
       }) as Controller;
@@ -74,7 +76,9 @@ export function PlayPage() {
 
   const r = room;
   const isMe = r.relation.isMe;
-  const hostName = r.parrots[0]?.name;
+  // the birds I can play with here (in my own house, not the one I am)
+  const friends = isMe && me_bird ? r.parrots.filter((p) => p.id !== me_bird.id) : r.parrots;
+  const hostName = friends[0]?.name;
 
   async function leaveFeather() {
     if (!me) return navigate('/login');
@@ -139,10 +143,10 @@ export function PlayPage() {
 
       <div className="play-actions" role="group" aria-label="놀기">
         <button className="btn" onClick={() => ctl.current?.chirp()}>짹짹</button>
-        <button className="btn leaf" disabled={r.parrots.length === 0}
-          onClick={() => { const n = ctl.current?.playTogether(); if (n === null) setToast('이 방에는 아직 앵무가 없어요.'); }}>같이 놀기</button>
-        <button className="btn" disabled={r.parrots.length === 0}
-          onClick={() => { const n = ctl.current?.preen(); if (n === null) setToast('이 방에는 아직 앵무가 없어요.'); }}>깃털 다듬기</button>
+        <button className="btn leaf" disabled={friends.length === 0}
+          onClick={() => { const n = ctl.current?.playTogether(); if (n === null) setToast('같이 놀 앵무가 없어요.'); }}>같이 놀기</button>
+        <button className="btn" disabled={friends.length === 0}
+          onClick={() => { const n = ctl.current?.preen(); if (n === null) setToast('같이 놀 앵무가 없어요.'); }}>깃털 다듬기</button>
         {!isMe && (
           <button className="btn primary" onClick={leaveFeather} disabled={r.relation.featherLeftToday}>
             {r.relation.featherLeftToday ? '오늘 남김' : '깃털 남기기'}
