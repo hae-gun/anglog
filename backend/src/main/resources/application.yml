@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: jjaklog-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/jjaklog}
+    username: ${DB_USER:jjaklog}
+    password: ${DB_PASSWORD:jjaklog}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 80MB
+
+server:
+  port: ${PORT:8080}
+  servlet:
+    session:
+      timeout: 30d
+      cookie:
+        name: JJAK_SESSION
+        http-only: true
+        same-site: lax
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+jjaklog:
+  # Development login (handle + nickname, no password). Turn off in production
+  # once Kakao login is wired up.
+  auth:
+    dev-login-enabled: ${DEV_LOGIN_ENABLED:true}
+  storage:
+    # Where uploaded photos are written. Served back under /media/**.
+    dir: ${STORAGE_DIR:./storage}
+  # Day boundaries (streaks, one feather per day) follow Korea time.
+  zone: Asia/Seoul

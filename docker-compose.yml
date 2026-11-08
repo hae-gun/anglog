@@ -1,0 +1,16 @@
+# Local database for development. Start with: docker compose up -d db
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: jjaklog
+      POSTGRES_USER: jjaklog
+      POSTGRES_PASSWORD: jjaklog
+      TZ: UTC
+    ports:
+      - "5433:5432"   # 5433 so it doesn't clash with another local Postgres
+    volumes:
+      - jjaklog-db:/var/lib/postgresql/data
+
+volumes:
+  jjaklog-db:

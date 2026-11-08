@@ -1,0 +1,21 @@
+# backend
+backend/build/
+backend/.gradle/
+backend/storage/
+backend/out/
+*.class
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+*.local
+
+# editors and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# secrets
+.env
+!.env.mock
