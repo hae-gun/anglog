@@ -44,6 +44,13 @@ public final class Messages {
         }
     }
 
+    /** Sent right before an admin closes this bird with 4007. */
+    public record Kicked(String type) {
+        public static Kicked of() {
+            return new Kicked("kicked");
+        }
+    }
+
     /** Sent to a tab right before it is closed with 4006 because the same owner came in elsewhere. */
     public record Replaced(String type) {
         public static Replaced of() {

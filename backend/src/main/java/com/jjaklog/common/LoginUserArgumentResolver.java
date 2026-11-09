@@ -1,5 +1,6 @@
 package com.jjaklog.common;
 
+import com.jjaklog.user.UserGate;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.core.MethodParameter;
@@ -9,6 +10,12 @@ import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
 
 public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver {
+
+    private final UserGate gate;
+
+    public LoginUserArgumentResolver(UserGate gate) {
+        this.gate = gate;
+    }
 
     @Override
     public boolean supportsParameter(MethodParameter parameter) {
@@ -29,6 +36,16 @@ public class LoginUserArgumentResolver implements HandlerMethodArgumentResolver 
             }
             return null;
         }
-        return (Long) uid;
+        Long userId = (Long) uid;
+        if (gate.isSuspended(userId)) {
+            // a suspended owner is logged out on their next request
+            session.invalidate();
+            if (annotation != null && annotation.required()) {
+                throw UserGate.suspended();
+            }
+            return null;
+        }
+        gate.touch(userId);
+        return userId;
     }
 }

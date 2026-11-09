@@ -1,4 +1,4 @@
-import { Api, ApiError, Comment, FeedTab, GuestbookEntry, NewPost, Page, Parrot, ParrotInput, Post, Room, RoomCard, UserSummary } from './types';
+import { AdminComment, AdminGuestbook, AdminOverview, AdminUser, Api, ApiError, Comment, ParkState, FeedTab, GuestbookEntry, NewPost, Page, Parrot, ParrotInput, Post, Room, RoomCard, UserSummary } from './types';
 
 // Where the API lives. Empty: the same origin (Vite proxy in development).
 // On GitHub Pages: https://api.anglog.nobody-asked.dev (set by the Pages workflow at build time).
@@ -98,4 +98,19 @@ export const httpApi: Api = {
 
   exploreRooms: () => request<RoomCard[]>('GET', '/api/explore/rooms'),
   randomRoom: (exclude) => request<{ handle: string } | undefined>('GET', `/api/explore/random${q({ exclude })}`).then((r) => r?.handle ?? null),
+
+  admin: {
+    overview: () => request<AdminOverview>('GET', '/api/admin/overview'),
+    users: (query, cursor) => request<Page<AdminUser>>('GET', `/api/admin/users${q({ q: query || null, cursor })}`),
+    suspend: (id, reason) => request<AdminUser>('POST', `/api/admin/users/${id}/suspend`, { reason }),
+    unsuspend: (id) => request<AdminUser>('POST', `/api/admin/users/${id}/unsuspend`),
+    posts: (cursor) => request<Page<Post>>('GET', `/api/admin/posts${q({ cursor })}`),
+    deletePost: (id) => request('DELETE', `/api/admin/posts/${id}`),
+    comments: (cursor) => request<Page<AdminComment>>('GET', `/api/admin/comments${q({ cursor })}`),
+    deleteComment: (id) => request('DELETE', `/api/admin/comments/${id}`),
+    guestbook: (cursor) => request<Page<AdminGuestbook>>('GET', `/api/admin/guestbook${q({ cursor })}`),
+    deleteGuestbook: (id) => request('DELETE', `/api/admin/guestbook/${id}`),
+    park: () => request<ParkState>('GET', '/api/admin/park'),
+    kick: (channel, pid, minutes) => request('POST', '/api/admin/park/kick', { channel, pid, minutes }),
+  },
 };

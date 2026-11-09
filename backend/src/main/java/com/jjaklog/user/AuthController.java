@@ -41,8 +41,11 @@ public class AuthController {
     private final JjaklogProperties props;
     private final LoginThrottle throttle;
     private final Clock clock;
+    private final com.jjaklog.admin.AdminGuard adminGuard;
 
-    public AuthController(UserService userService, JjaklogProperties props, LoginThrottle throttle, Clock clock) {
+    public AuthController(UserService userService, JjaklogProperties props, LoginThrottle throttle, Clock clock,
+                          com.jjaklog.admin.AdminGuard adminGuard) {
+        this.adminGuard = adminGuard;
         this.userService = userService;
         this.props = props;
         this.throttle = throttle;
@@ -93,12 +96,17 @@ public class AuthController {
         return UserSummary.of(user);
     }
 
+    /** Me, plus whether I may open the admin page (only this answer says so). */
+    public record MeView(Long id, String handle, String nickname, boolean admin) {
+    }
+
     @GetMapping("/me")
-    public ResponseEntity<UserSummary> me(@LoginUser(required = false) Long userId) {
+    public ResponseEntity<MeView> me(@LoginUser(required = false) Long userId) {
         if (userId == null) {
             return ResponseEntity.noContent().build();
         }
-        return ResponseEntity.ok(UserSummary.of(userService.get(userId)));
+        User user = userService.get(userId);
+        return ResponseEntity.ok(new MeView(user.getId(), user.getHandle(), user.getNickname(), adminGuard.isAdmin(user)));
     }
 
     @PostMapping("/logout")

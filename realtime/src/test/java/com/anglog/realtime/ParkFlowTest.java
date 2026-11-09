@@ -26,8 +26,12 @@ class ParkFlowTest {
     @Autowired
     SessionRegistry registry;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    com.anglog.realtime.admin.ParkWatch watch;
+
     @BeforeEach
     void waitForCleanState() throws InterruptedException {
+        watch.unbanAll();
         // the previous test's sockets close asynchronously; their late leaves must not leak in
         long deadline = System.currentTimeMillis() + 5_000;
         while (registry.size() > 0 && System.currentTimeMillis() < deadline) {
@@ -214,6 +218,47 @@ class ParkFlowTest {
             JsonNode g = guest.helloAs("가짜", "v1.bm9wZQ.AAAA", 0, 23);
             assertThat(g.path("owner").asBoolean()).isFalse();
             assertThat(has(g, "players", p -> p.path("look").path("home").asText("").equals("bori"))).isTrue();
+        }
+    }
+
+    private java.net.http.HttpResponse<String> internal(String path, String body, String key) throws Exception {
+        java.net.http.HttpRequest.Builder b = java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://localhost:" + port + path));
+        if (key != null) {
+            b.header("X-Admin-Key", key);
+        }
+        if (body != null) {
+            b.header("Content-Type", "application/json").POST(java.net.http.HttpRequest.BodyPublishers.ofString(body));
+        }
+        return java.net.http.HttpClient.newHttpClient().send(b.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void adminSeesTheParkAndCanSendABirdOut() throws Exception {
+        try (TestClient bad = TestClient.connect(port)) {
+            int pid = bad.hello("나쁜이름").path("pid").asInt();
+            assertThat(internal("/internal/park", null, null).statusCode()).isEqualTo(403);
+            assertThat(internal("/internal/park", null, "wrong").statusCode()).isEqualTo(403);
+
+            java.net.http.HttpResponse<String> state = internal("/internal/park", null, "flow-secret");
+            assertThat(state.statusCode()).isEqualTo(200);
+            JsonNode s = new com.fasterxml.jackson.databind.ObjectMapper().readTree(state.body());
+            assertThat(s.path("online").asInt()).isEqualTo(1);
+            assertThat(s.path("today").path("hellos").asLong()).isGreaterThanOrEqualTo(1);
+            JsonNode bird = s.path("channels").get(0).path("birds").get(0);
+            assertThat(bird.path("name").asText()).isEqualTo("나쁜이름");
+            assertThat(bird.path("addr").asText()).hasSize(8);
+            int channel = s.path("channels").get(0).path("no").asInt();
+
+            assertThat(internal("/internal/park/kick", "{\"channel\":" + channel + ",\"pid\":9999,\"minutes\":5}", "flow-secret")
+                    .statusCode()).isEqualTo(404);
+            assertThat(internal("/internal/park/kick", "{\"channel\":" + channel + ",\"pid\":" + pid + ",\"minutes\":5}", "flow-secret")
+                    .statusCode()).isEqualTo(200);
+            bad.await("kicked");
+            assertThat(bad.awaitClose().getCode()).isEqualTo(CloseCodes.KICKED.getCode());
+        }
+        // the same address is kept out for now
+        try (TestClient again = TestClient.connect(port)) {
+            assertThat(again.awaitClose().getCode()).isEqualTo(CloseCodes.KICKED.getCode());
         }
     }
 }

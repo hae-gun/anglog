@@ -65,6 +65,9 @@ public class UserService {
         if (!ok || user == null || user.getPasswordHash() == null) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "아이디나 비밀번호가 맞지 않아요.");
         }
+        if (user.getSuspendedAt() != null) {
+            throw UserGate.suspended();
+        }
         return user;
     }
 
@@ -83,6 +86,9 @@ public class UserService {
         if (!HANDLE.matcher(handle).matches()) {
             throw ApiException.badRequest("INVALID_HANDLE", "아이디는 영어 소문자, 숫자, 밑줄로 3~20자여야 해요.");
         }
+        users.findByHandle(handle).filter(u -> u.getSuspendedAt() != null).ifPresent(u -> {
+            throw UserGate.suspended();
+        });
         return users.findByHandle(handle).orElseGet(() -> {
             String nickname = rawNickname == null || rawNickname.isBlank() ? handle : rawNickname.trim();
             if (nickname.length() > 20) {

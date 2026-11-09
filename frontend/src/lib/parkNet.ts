@@ -28,7 +28,8 @@ export interface NetPlayer extends NetState {
 /** Why the server turned my prank down. */
 export type PrankNo = 'calm' | 'far' | 'wait' | 'blocked' | 'gone';
 /** replaced: the same account came into the park from another tab or device, so this one left. */
-export type NetStatus = 'connecting' | 'online' | 'offline' | 'replaced';
+/** kicked: an admin sent this bird out (it may be kept out for a while), so no reconnecting. */
+export type NetStatus = 'connecting' | 'online' | 'offline' | 'replaced' | 'kicked';
 /** Where the server put my bird back (my last spot), when it did. */
 export interface NetSpot { x: number; y: number; z: number; ry: number }
 
@@ -87,6 +88,7 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
   let retryTimer = 0;
   let lastSent = '';
   let replaced = false;
+  let kicked = false;
 
   const send = (msg: object) => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -147,6 +149,9 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
         case 'replaced':
           replaced = true;
           break;
+        case 'kicked':
+          kicked = true;
+          break;
         case 'prankNo':
           on.prankNo(msg.to, msg.why);
           break;
@@ -162,6 +167,10 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
       // my bird went on in another tab or device; coming back here would push that one out again
       if (replaced || ev.code === 4006) {
         on.status('replaced');
+        return;
+      }
+      if (kicked || ev.code === 4007) {
+        on.status('kicked');
         return;
       }
       on.status('offline');

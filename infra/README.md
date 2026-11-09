@@ -144,6 +144,7 @@ ssh -i ~/.ssh/<서버키> rocky@<APP_IP> anglog-deploy
 **주의**
 - 서버에서 레포 파일을 직접 고치면 배포가 멈춘다. 수정은 항상 맥에서 커밋.
 - `docker compose down -v` 는 하지 말 것. `-v`가 DB와 사진 볼륨을 지운다.
+- 관리자 페이지(anglog.nobody-asked.dev/admin)는 `infra/.env`의 `ADMIN_HANDLES`에 적은 아이디만 연다(쉼표로 여러 개). 바꾼 뒤 `docker compose up -d api`. 정지, 지우기, 앵파크 내보내기는 api 로그에 `admin <아이디> ...` 한 줄씩 남는다(`docker compose logs api | grep admin`).
 - 이미 돌고 있는 서버에 PARK_TOKEN_SECRET이 없으면 compose가 멈추며 알려 준다. 위의 sed 한 줄(PARK_TOKEN_SECRET)만 실행하고 배포한다. 값을 바꾸면 그때 공원에 있던 집사들은 다시 접속할 때 새 토큰을 받으니 따로 할 일은 없다.
 - `infra/.env`를 바꿨으면 `cd ~/anglog/anglog/infra && docker compose up -d`. 화면 주소(DOMAIN)를 바꾸면 Pages 설정과 `CNAME` 파일도 같이, API 주소를 바꾸면 `pages.yml`과 고해야지의 `ANGLOG_DOMAIN`, 인증서도 같이 바꾼다.
 

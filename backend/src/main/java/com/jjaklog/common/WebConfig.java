@@ -1,5 +1,6 @@
 package com.jjaklog.common;
 
+import com.jjaklog.user.UserGate;
 import java.nio.file.Path;
 import java.util.List;
 import org.springframework.context.annotation.Configuration;
@@ -12,14 +13,16 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final JjaklogProperties props;
+    private final UserGate gate;
 
-    public WebConfig(JjaklogProperties props) {
+    public WebConfig(JjaklogProperties props, UserGate gate) {
         this.props = props;
+        this.gate = gate;
     }
 
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
-        resolvers.add(new LoginUserArgumentResolver());
+        resolvers.add(new LoginUserArgumentResolver(gate));
     }
 
     /**

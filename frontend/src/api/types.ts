@@ -7,6 +7,8 @@ export interface UserSummary {
   id: number;
   handle: string;
   nickname: string;
+  /** only on me(): may open the admin page */
+  admin?: boolean;
 }
 
 export interface ParrotColors {
@@ -123,6 +125,39 @@ export interface RoomCard {
 
 export type FeedTab = 'latest' | 'following';
 
+// ---- admin page (backend com.jjaklog.admin, realtime com.anglog.realtime.admin) ----
+
+export interface AdminDay { date: string; signups: number; posts: number; active: number }
+
+export interface ParkBird {
+  pid: number; name: string; species: string; home: string | null; owner: boolean; calm: boolean;
+  /** short one-way hash of the address, to spot several birds from one place */
+  addr: string | null; since: string | null; x: number; z: number;
+}
+
+export interface ParkState {
+  online: number;
+  capacity: number;
+  channels: { no: number; size: number; birds: ParkBird[] }[];
+  today: { date: string; visitors: number; owners: number; hellos: number; peak: number; since: string };
+  banned: number;
+}
+
+export interface AdminOverview {
+  totals: { users: number; parrots: number; posts: number; comments: number; guestbook: number; feathers: number; suspended: number };
+  days: AdminDay[];
+  park: ParkState | null;
+  parkError: string | null;
+}
+
+export interface AdminUser {
+  id: number; handle: string; nickname: string; createdAt: string; parrots: number; posts: number;
+  lastActive: string | null; suspendedAt: string | null; suspendReason: string | null; admin: boolean;
+}
+
+export interface AdminComment { id: number; author: UserSummary | null; body: string; createdAt: string; postId: number }
+export interface AdminGuestbook { id: number; author: UserSummary | null; body: string; createdAt: string; roomHandle: string | null }
+
 export interface Api {
   me(): Promise<UserSummary | null>;
   devLogin(handle: string, nickname: string): Promise<UserSummary>;
@@ -158,6 +193,21 @@ export interface Api {
   exploreRooms(): Promise<RoomCard[]>;
   /** null when there is no other room yet */
   randomRoom(exclude?: string | null): Promise<string | null>;
+
+  admin: {
+    overview(): Promise<AdminOverview>;
+    users(q: string, cursor?: number | null): Promise<Page<AdminUser>>;
+    suspend(id: number, reason: string): Promise<AdminUser>;
+    unsuspend(id: number): Promise<AdminUser>;
+    posts(cursor?: number | null): Promise<Page<Post>>;
+    deletePost(id: number): Promise<void>;
+    comments(cursor?: number | null): Promise<Page<AdminComment>>;
+    deleteComment(id: number): Promise<void>;
+    guestbook(cursor?: number | null): Promise<Page<AdminGuestbook>>;
+    deleteGuestbook(id: number): Promise<void>;
+    park(): Promise<ParkState>;
+    kick(channel: number, pid: number, minutes: number): Promise<void>;
+  };
 }
 
 export class ApiError extends Error {

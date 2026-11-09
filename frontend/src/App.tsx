@@ -13,6 +13,7 @@ import { useSession } from './session';
 const RoomPage = lazy(() => import('./pages/Room').then((m) => ({ default: m.RoomPage })));
 const ParkPage = lazy(() => import('./pages/Park').then((m) => ({ default: m.ParkPage })));
 const PlayPage = lazy(() => import('./pages/Play').then((m) => ({ default: m.PlayPage })));
+const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.AdminPage })));
 
 function RequireLogin({ children }: { children: ReactNode }) {
   const { me, loading } = useSession();
@@ -38,11 +39,12 @@ export function App() {
     );
   }
   return (
-    <div className="app">
+    <div className={pathname.startsWith('/admin') ? 'app wide' : 'app'}>
       <header className="topbar">
         <Link to="/feed" className="logo"><img src="/icon.svg" alt="" />앵로그</Link>
         <div className="row" style={{ alignItems: 'center' }}>
           {isMock && <span className="mock-badge">가짜 서버</span>}
+          {me?.admin && <Link className="btn small" to="/admin">관리</Link>}
           {!loading && !me && <Link className="btn small" to="/login">로그인</Link>}
         </div>
       </header>
@@ -57,6 +59,7 @@ export function App() {
           <Route path="/visit" element={<VisitRedirect />} />
           <Route path="/play/:handle" element={<Suspense fallback={<div className="center">방에 들어가는 중</div>}><PlayPage /></Suspense>} />
           <Route path="/room/:handle" element={<Suspense fallback={<div className="center">방에 들어가는 중</div>}><RoomPage /></Suspense>} />
+          <Route path="/admin" element={<Suspense fallback={<div className="center">불러오는 중</div>}><AdminPage /></Suspense>} />
           <Route path="/parrots/new" element={<RequireLogin><ParrotNewPage /></RequireLogin>} />
           <Route path="/parrots/:id/edit" element={<RequireLogin><ParrotEditPage /></RequireLogin>} />
           <Route path="*" element={<div className="page"><p className="empty">없는 페이지예요.</p></div>} />

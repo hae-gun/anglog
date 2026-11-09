@@ -234,7 +234,7 @@ export function ParkPage() {
     const client = connectPark(url, lookRef.current, () => ctl.current?.state() ?? null, {
       status(st) {
         setStatus(st);
-        if (st === 'replaced') {
+        if (st === 'replaced' || st === 'kicked') {
           map.clear();
           ctl.current?.clearRemotes();
         }
@@ -454,6 +454,13 @@ export function ParkPage() {
             <button className="btn small primary" onClick={() => setNetRound((n) => n + 1)}>여기서 다시 놀기</button>
             <Link className="btn small" to="/feed">앵로그로 가기</Link>
           </div>
+        </div>
+      )}
+
+      {status === 'kicked' && (
+        <div className="park-invite" role="dialog" aria-label="공원에서 나오게 됐어요">
+          <b>공원에서 잠시 나오게 됐어요</b>
+          <p>운영자가 이 앵무를 공원에서 내보냈어요. 지금은 혼자 노는 공원이에요. 이름이나 행동이 다른 집사를 불편하게 했다면 다음에는 조심해 주세요.</p>
         </div>
       )}
 

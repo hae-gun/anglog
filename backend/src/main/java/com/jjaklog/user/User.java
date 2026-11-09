@@ -29,6 +29,13 @@ public class User {
     @Column(name = "password_hash", length = 100)
     private String passwordHash;
 
+    /** Set when an admin suspended the account: no login, and the session stops working. */
+    @Column(name = "suspended_at")
+    private Instant suspendedAt;
+
+    @Column(name = "suspend_reason", length = 200)
+    private String suspendReason;
+
     protected User() {
     }
 
@@ -64,5 +71,23 @@ public class User {
 
     public void rename(String nickname) {
         this.nickname = nickname;
+    }
+
+    public Instant getSuspendedAt() {
+        return suspendedAt;
+    }
+
+    public String getSuspendReason() {
+        return suspendReason;
+    }
+
+    public void suspend(Instant at, String reason) {
+        this.suspendedAt = at;
+        this.suspendReason = reason;
+    }
+
+    public void unsuspend() {
+        this.suspendedAt = null;
+        this.suspendReason = null;
     }
 }

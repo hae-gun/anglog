@@ -10,11 +10,13 @@ import com.anglog.realtime.protocol.Messages;
 import com.anglog.realtime.protocol.Messages.ErrorMessage;
 import com.anglog.realtime.protocol.Messages.Look;
 import com.anglog.realtime.protocol.Messages.Pong;
+import com.anglog.realtime.protocol.Messages.Kicked;
 import com.anglog.realtime.protocol.Messages.PrankNo;
 import com.anglog.realtime.protocol.Messages.Replaced;
 import com.anglog.realtime.protocol.Messages.Spot;
 import com.anglog.realtime.protocol.Messages.Welcome;
 import com.anglog.realtime.protocol.Pose;
+import com.anglog.realtime.admin.ParkWatch;
 import com.anglog.realtime.session.ClientSession;
 import com.anglog.realtime.session.LastSpots;
 import com.anglog.realtime.session.ParkTokens;
@@ -57,9 +59,11 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
     private final PrankRules prankRules;
     private final ParkTokens tokens;
     private final LastSpots spots;
+    private final ParkWatch watch;
 
     public ParkWebSocketHandler(ParkProperties props, SessionRegistry registry, Channels channels, LookRules looks,
-                                MessageSender sender, ObjectMapper mapper) {
+                                MessageSender sender, ObjectMapper mapper, ParkWatch watch) {
+        this.watch = watch;
         this.props = props;
         this.registry = registry;
         this.channels = channels;
@@ -82,6 +86,8 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         ClientSession session = new ClientSession(socket, remoteIp(raw), now());
         if (registry.add(session) > props.maxConnectionsPerIp()) {
             sender.close(session, CloseCodes.TOO_MANY_CONNECTIONS);
+        } else if (watch.bannedAddr(session.remoteIp(), now())) {
+            kick(session);
         }
     }
 
@@ -105,6 +111,12 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
 
     public void close(ClientSession session, CloseStatus status) {
         sender.close(session, status);
+    }
+
+    /** An admin sent this bird out (or its address is kept out for now). */
+    public void kick(ClientSession session) {
+        sender.send(session, Kicked.of());
+        sender.close(session, CloseCodes.KICKED);
     }
 
     // ---------------------------------------------------------------- inbound
@@ -161,6 +173,10 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         }
         // only a verified owner gets a house link; a home typed into hello is dropped
         ParkTokens.Owner owner = tokens.verify(msg.path("token").asText(null), now);
+        if (owner != null && watch.bannedOwner(owner.userId(), now)) {
+            kick(session);
+            return;
+        }
         Pose spot = null;
         if (owner != null) {
             session.owner(owner.userId(), owner.handle());
@@ -185,6 +201,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         Channels.Joined joined = channels.enter(look, pose, msg.path("calm").asBoolean(false));
         Channel channel = joined.channel();
         session.ready(channel.no(), joined.pid(), now);
+        watch.hello(session.remoteIp(), session.ownerId(), channels.total());
         // into the broadcast set before the snapshot, so nothing falls between them;
         // the next batch may repeat someone the snapshot already has, and the browser ignores the repeat
         registry.joinChannel(session);

@@ -56,5 +56,10 @@ jjaklog:
   # Shared with the 앵파크 realtime server (angpark.token-secret): signs who owns a bird in the park.
   park:
     token-secret: ${PARK_TOKEN_SECRET:local-dev-park-secret}
+    # where the admin page reads who is in the park (inside the docker network in production)
+    realtime-url: ${PARK_REALTIME_URL:http://localhost:8090}
+  # Admin page (/admin): these handles only, comma separated. Empty means nobody.
+  admin:
+    handles: ${ADMIN_HANDLES:}
   # Day boundaries (streaks, one feather per day) follow Korea time.
   zone: Asia/Seoul

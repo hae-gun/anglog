@@ -3,7 +3,7 @@
 // Data lives only in this tab and resets on reload.
 
 import {
-  Api, ApiError, Comment, FeedTab, GuestbookEntry, Mood, MOODS, NewPost, Page, Parrot, ParrotInput,
+  AdminUser, Api, ApiError, ParkState, Comment, FeedTab, GuestbookEntry, Mood, MOODS, NewPost, Page, Parrot, ParrotInput,
   Post, Room, RoomCard, SPECIES, UserSummary,
 } from './types';
 
@@ -170,7 +170,8 @@ async function imageSize(blob: Blob) {
 const passwords = new Map<string, string>([['haru', 'parrot123'], ['bori', 'parrot123'], ['kongi', 'parrot123']]);
 
 export const mockApi: Api = {
-  async me() { seed(); return wait(meId == null ? null : userById(meId)); },
+  // everyone is an admin in the mock, so the admin page can be tried without a server
+  async me() { seed(); return wait(meId == null ? null : { ...userById(meId), admin: true }); },
   async devLogin(handle, nickname) {
     seed();
     const h = handle.trim().toLowerCase();
@@ -391,4 +392,107 @@ export const mockApi: Api = {
     const pool = users.filter((u) => u.id !== meId && u.handle !== exclude && parrots.some((p) => p.ownerId === u.id));
     return wait(pool.length ? pool[Math.floor(Math.random() * pool.length)].handle : null);
   },
+
+  admin: {
+    async overview() {
+      requireMe();
+      const days = Array.from({ length: 14 }, (_, i) => {
+        const d = daysAgo(13 - i);
+        const date = seoulDay(d);
+        return {
+          date,
+          signups: users.filter((u) => seoulDay(createdAt(u.id)) === date).length + (i % 4 === 1 ? 1 : 0),
+          posts: posts.filter((p) => seoulDay(p.createdAt) === date).length,
+          active: Math.min(users.length, 1 + Math.round(i * 0.3 + (i % 3))),
+        };
+      });
+      return wait({
+        totals: {
+          users: users.length, parrots: parrots.length, posts: posts.length, comments: comments.length,
+          guestbook: guestbook.length, feathers: feathers.length, suspended: suspended.size,
+        },
+        days,
+        park: mockPark(),
+        parkError: null,
+      });
+    },
+    async users(q, cursor) {
+      requireMe();
+      const t = q.trim().toLowerCase();
+      const rows = users.filter((u) => !t || u.handle.includes(t) || u.nickname.toLowerCase().includes(t)).map(adminUser);
+      return wait(page(rows, cursor, 50));
+    },
+    async suspend(id, reason) {
+      const me = requireMe();
+      if (id === me) throw new ApiError(400, 'ADMIN_TARGET', '관리자 계정은 정지할 수 없어요.');
+      suspended.set(id, { at: iso(now()), reason: reason.trim() || null });
+      return wait(adminUser(userById(id)));
+    },
+    async unsuspend(id) {
+      requireMe();
+      suspended.delete(id);
+      return wait(adminUser(userById(id)));
+    },
+    async posts(cursor) { requireMe(); return wait(page(posts.map(toView), cursor, 30)); },
+    async deletePost(id) {
+      requireMe();
+      const i = posts.findIndex((p) => p.id === id);
+      if (i >= 0) posts.splice(i, 1);
+      return wait(undefined);
+    },
+    async comments(cursor) {
+      requireMe();
+      return wait(page(comments.map((c) => ({ id: c.id, author: c.author, body: c.body, createdAt: c.createdAt, postId: c.postId })), cursor, 50));
+    },
+    async deleteComment(id) {
+      requireMe();
+      const i = comments.findIndex((c) => c.id === id);
+      if (i >= 0) comments.splice(i, 1);
+      return wait(undefined);
+    },
+    async guestbook(cursor) {
+      requireMe();
+      return wait(page(guestbook.map((g) => ({ id: g.id, author: g.author, body: g.body, createdAt: g.createdAt, roomHandle: userById(g.ownerId).handle })), cursor, 50));
+    },
+    async deleteGuestbook(id) {
+      requireMe();
+      const i = guestbook.findIndex((g) => g.id === id);
+      if (i >= 0) guestbook.splice(i, 1);
+      return wait(undefined);
+    },
+    async park() { requireMe(); return wait(mockPark()); },
+    async kick(channel, pid) {
+      requireMe();
+      kicked.add(`${channel}:${pid}`);
+      return wait(undefined);
+    },
+  },
 };
+
+// ---- admin page stand-ins ----
+const suspended = new Map<number, { at: string; reason: string | null }>();
+const kicked = new Set<string>();
+const createdAt = (id: number) => (id < 1010 ? daysAgo(30 + (id % 7)) : daysAgo(id % 3));
+
+function adminUser(u: UserSummary): AdminUser {
+  const s = suspended.get(u.id);
+  return {
+    id: u.id, handle: u.handle, nickname: u.nickname, createdAt: iso(createdAt(u.id)),
+    parrots: parrots.filter((p) => p.ownerId === u.id).length, posts: posts.filter((p) => p.authorId === u.id).length,
+    lastActive: seoulDay(daysAgo(u.id % 5)), suspendedAt: s?.at ?? null, suspendReason: s?.reason ?? null, admin: u.id === meId,
+  };
+}
+
+function mockPark(): ParkState {
+  const birds = [
+    { pid: 3, name: '머란이', species: 'LOVEBIRD', home: 'haru', owner: true, calm: false, addr: 'a1f03c9e' },
+    { pid: 5, name: '앵무', species: 'BUDGIE', home: null, owner: false, calm: false, addr: '7c2e11b0' },
+    { pid: 8, name: '이상한이름', species: 'OTHER', home: null, owner: false, calm: false, addr: '7c2e11b0' },
+    { pid: 9, name: '콩이', species: 'COCKATIEL', home: 'kongi', owner: true, calm: true, addr: '0d9be4a2' },
+  ].filter((b) => !kicked.has(`1:${b.pid}`)).map((b, i) => ({ ...b, since: iso(new Date(Date.now() - (i + 1) * 7 * 60000)), x: i * 3 - 4, z: 18 - i * 5 }));
+  return {
+    online: birds.length, capacity: 50, channels: [{ no: 1, size: birds.length, birds }],
+    today: { date: seoulDay(now()), visitors: 23, owners: 4, hellos: 41, peak: 6, since: iso(daysAgo(2)) },
+    banned: kicked.size,
+  };
+}

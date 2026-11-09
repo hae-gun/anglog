@@ -40,6 +40,9 @@ services:
       # 화면(GitHub Pages)에서 쿠키를 달고 부를 수 있는 곳은 이 주소 하나
       CORS_ALLOWED_ORIGINS: https://${DOMAIN:?infra/.env에 DOMAIN을 넣으세요}
       PARK_TOKEN_SECRET: ${PARK_TOKEN_SECRET:?infra/.env에 PARK_TOKEN_SECRET을 넣으세요}
+      # 관리자 페이지: 열 수 있는 아이디, 앵파크 현황을 읽어 올 곳(도커 안쪽 주소. 앞단 프록시는 /internal을 넘기지 않는다)
+      ADMIN_HANDLES: ${ADMIN_HANDLES:-}
+      PARK_REALTIME_URL: http://realtime:8090
     volumes:
       - media:/data/media
     # 힙은 이 값의 75% (Dockerfile)

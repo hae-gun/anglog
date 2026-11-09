@@ -11,6 +11,8 @@ public final class CloseCodes {
     public static final CloseStatus MESSAGE_TOO_LARGE = new CloseStatus(4005, "MESSAGE_TOO_LARGE");
     /** The same owner came in from another tab or device; the old one does not reconnect. */
     public static final CloseStatus REPLACED = new CloseStatus(4006, "REPLACED");
+    /** An admin sent this bird out of the park (and may keep it out for a while). No reconnecting. */
+    public static final CloseStatus KICKED = new CloseStatus(4007, "KICKED");
 
     private CloseCodes() {
     }

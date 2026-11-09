@@ -364,3 +364,59 @@ img { max-width: 100%; display: block; }
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }
 }
+
+/* ---- 관리 (/admin): wider than the phone column, still fine on a phone ---- */
+.app.wide { max-width: 960px; }
+.admin .muted, .admin-note { color: var(--muted); margin: 0; font-size: 14px; }
+.admin-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.admin-tabs .tab { font-size: 14px; }
+.btn.danger { background: #FFEDE4; color: #8A2E10; }
+.admin-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.admin-tile { background: var(--card); border: 2px solid var(--ink); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.admin-tile b { font: 28px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.admin-tile-label { font-size: 13px; color: var(--muted); }
+.admin-tile-sub { font-size: 12px; color: var(--muted); }
+.admin-chart { padding: 12px 14px 8px; box-shadow: none; }
+.admin-chart header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.admin-chart h2 { margin: 0; font: 17px/1.3 var(--display); }
+.admin-chart header span { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.admin-chart header b { font: 20px/1 var(--display); color: var(--ink); }
+.admin-chart .muted { font-size: 12px; }
+.admin-chart svg { display: block; margin-top: 6px; }
+.admin-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.admin-axis { stroke: var(--line); stroke-width: 1; }
+.admin-bar { fill: #A9D89C; }
+.admin-bar.on { fill: var(--leaf); }
+.admin-tick { font-size: 11px; fill: var(--muted); }
+.admin-row { display: flex; gap: 12px; padding: 12px; box-shadow: none; align-items: flex-start; }
+.admin-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.admin-thumb { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 2px solid var(--ink); flex: none; }
+.admin-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--muted); }
+.admin-meta a { color: var(--ink); font-weight: 700; text-decoration: none; }
+.admin-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.admin-table-wrap { box-shadow: none; overflow-x: auto; }
+.admin-sub { margin: 0; padding: 10px 12px 0; font: 16px/1.3 var(--display); }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.admin-table th { text-align: left; font-weight: 400; color: var(--muted); font-size: 12px; padding: 8px 10px; border-bottom: 2px solid var(--line); white-space: nowrap; }
+.admin-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; font-variant-numeric: tabular-nums; }
+.admin-table tr:last-child td { border-bottom: 0; }
+.admin-table td:last-child { text-align: right; white-space: nowrap; }
+.admin-table tr.off td { background: #FBF3EF; }
+.admin-table a { color: var(--ink); font-weight: 700; text-decoration: none; }
+.admin-table code { font-size: 12px; }
+.admin-flag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: var(--leaf-soft); border: 1px solid var(--ink); white-space: nowrap; vertical-align: 1px; }
+.admin-flag.stop { background: #FFEDE4; color: #8A2E10; }
+@media (max-width: 640px) {
+  /* tables become one small card per row on a phone */
+  .admin-table thead { display: none; }
+  .admin-table, .admin-table tbody, .admin-table tr { display: block; }
+  .admin-table tr { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 2px 14px; align-items: center; }
+  .admin-table tr:last-child { border-bottom: 0; }
+  .admin-table td { display: inline; padding: 0; border: 0; font-size: 13px; }
+  .admin-table td.lead { flex-basis: 100%; font-size: 15px; }
+  .admin-table td[data-label]::before { content: attr(data-label) ' '; color: var(--muted); }
+  .admin-table td:last-child { margin-left: auto; }
+  .admin-table td:last-child:empty { display: none; }
+  .admin-table tr.off { background: #FBF3EF; }
+  .admin-table tr.off td { background: none; }
+}
