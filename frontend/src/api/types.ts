@@ -155,6 +155,14 @@ export interface AdminUser {
   lastActive: string | null; suspendedAt: string | null; suspendReason: string | null; admin: boolean;
 }
 
+export interface MetamoaEvent {
+  id: string; title: string; desc?: string | null; starts_at: string; ends_at: string;
+  daily_from?: string | null; daily_to?: string | null; url?: string | null;
+}
+export interface MetamoaEventInput {
+  title: string; desc?: string; starts_at: string; ends_at: string; daily_from?: string; daily_to?: string; url?: string;
+}
+
 export interface AdminComment { id: number; author: UserSummary | null; body: string; createdAt: string; postId: number }
 export interface AdminGuestbook { id: number; author: UserSummary | null; body: string; createdAt: string; roomHandle: string | null }
 
@@ -207,6 +215,11 @@ export interface Api {
     deleteGuestbook(id: number): Promise<void>;
     park(): Promise<ParkState>;
     kick(channel: number, pid: number, minutes: number): Promise<void>;
+    metamoa(): Promise<{ enabled: boolean; spaceId: string }>;
+    metamoaUpdate(text: string): Promise<{ shown_until?: string }>;
+    metamoaEvents(): Promise<{ events: MetamoaEvent[] }>;
+    metamoaAddEvent(e: MetamoaEventInput): Promise<{ event: MetamoaEvent }>;
+    metamoaDeleteEvent(id: string): Promise<void>;
   };
 }
 

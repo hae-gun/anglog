@@ -3,7 +3,7 @@
 // Data lives only in this tab and resets on reload.
 
 import {
-  AdminUser, Api, ApiError, ParkState, Comment, FeedTab, GuestbookEntry, Mood, MOODS, NewPost, Page, Parrot, ParrotInput,
+  AdminUser, Api, ApiError, MetamoaEvent, ParkState, Comment, FeedTab, GuestbookEntry, Mood, MOODS, NewPost, Page, Parrot, ParrotInput,
   Post, Room, RoomCard, SPECIES, UserSummary,
 } from './types';
 
@@ -461,6 +461,27 @@ export const mockApi: Api = {
       return wait(undefined);
     },
     async park() { requireMe(); return wait(mockPark()); },
+    async metamoa() { requireMe(); return wait({ enabled: true, spaceId: 'angpark' }); },
+    async metamoaUpdate(text) {
+      requireMe();
+      if (mmPostedAt && Date.now() - mmPostedAt < 86400000) throw new ApiError(429, 'METAMOA_429', '메타모아가 받지 않았어요(429, too_soon).');
+      if (!text.trim()) throw new ApiError(400, 'BAD_TEXT', '소식은 200자, 3줄까지 적어 주세요.');
+      mmPostedAt = Date.now();
+      return wait({ shown_until: new Date(Date.now() + 7 * 86400000).toISOString() });
+    },
+    async metamoaEvents() { requireMe(); return wait({ events: [...mmEvents] }); },
+    async metamoaAddEvent(e) {
+      requireMe();
+      const ev = { id: `ev_${nextId()}`, ...e };
+      mmEvents.push(ev);
+      return wait({ event: ev });
+    },
+    async metamoaDeleteEvent(id) {
+      requireMe();
+      const i = mmEvents.findIndex((x) => x.id === id);
+      if (i >= 0) mmEvents.splice(i, 1);
+      return wait(undefined);
+    },
     async kick(channel, pid) {
       requireMe();
       kicked.add(`${channel}:${pid}`);
@@ -472,6 +493,8 @@ export const mockApi: Api = {
 // ---- admin page stand-ins ----
 const suspended = new Map<number, { at: string; reason: string | null }>();
 const kicked = new Set<string>();
+let mmPostedAt = 0;
+const mmEvents: MetamoaEvent[] = [];
 const createdAt = (id: number) => (id < 1010 ? daysAgo(30 + (id % 7)) : daysAgo(id % 3));
 
 function adminUser(u: UserSummary): AdminUser {

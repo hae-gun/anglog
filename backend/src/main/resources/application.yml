@@ -58,6 +58,10 @@ jjaklog:
     token-secret: ${PARK_TOKEN_SECRET:local-dev-park-secret}
     # where the admin page reads who is in the park (inside the docker network in production)
     realtime-url: ${PARK_REALTIME_URL:http://localhost:8090}
+  # metamoa.com listing: news and events from the admin page. Off until both are set.
+  metamoa:
+    key: ${METAMOA_KEY:}
+    space-id: ${METAMOA_SPACE_ID:}
   # Admin page (/admin): these handles only, comma separated. Empty means nobody.
   admin:
     handles: ${ADMIN_HANDLES:}

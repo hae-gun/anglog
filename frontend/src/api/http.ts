@@ -112,5 +112,10 @@ export const httpApi: Api = {
     deleteGuestbook: (id) => request('DELETE', `/api/admin/guestbook/${id}`),
     park: () => request<ParkState>('GET', '/api/admin/park'),
     kick: (channel, pid, minutes) => request('POST', '/api/admin/park/kick', { channel, pid, minutes }),
+    metamoa: () => request('GET', '/api/admin/metamoa'),
+    metamoaUpdate: (text) => request('POST', '/api/admin/metamoa/update', { text }),
+    metamoaEvents: () => request('GET', '/api/admin/metamoa/events'),
+    metamoaAddEvent: (e) => request('POST', '/api/admin/metamoa/events', e),
+    metamoaDeleteEvent: (id) => request('DELETE', `/api/admin/metamoa/events/${encodeURIComponent(id)}`).then(() => undefined),
   },
 };

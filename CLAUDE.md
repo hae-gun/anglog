@@ -17,6 +17,7 @@
   - 채널(공원 하나, 정원 50) 안의 변경을 200ms마다 한 번에 묶어 보냄. 고해야지 realtime-server의 방식만 가져왔고 그 서버에는 의존하지 않는다
   - 말은 정해진 문구 번호만(frontend/src/lib/phrases.ts와 angpark.phrase-count를 같이 바꿀 것). 이름과 모양은 LookRules가 조용히 고친다
   - 로그인한 집사는 API가 서명한 앵파크 토큰(POST /api/park/token, PARK_TOKEN_SECRET 공유)을 hello에 싣는다. 계정당 앵무 한 마리: 다른 곳에서 들어오면 예전 연결은 4006으로 닫고 새 앵무가 그 자리에서 나온다. 마지막 자리는 30분 기억. home(집 링크)은 토큰이 맞을 때만. 규약 10장
+  - 메타모아(metamoa.com) 목록: 실시간 서버 MetamoaLive가 접속자 수만 10분마다(METAMOA_KEY, METAMOA_SPACE_ID 없으면 꺼짐). 소식과 이벤트는 API admin/Metamoa를 거쳐 관리자 페이지에서. 신청과 캐릭터 올리기는 infra/scripts/metamoa.sh. 키는 infra/.env에만
   - /internal/park(현황, 내보내기 4007과 주소 막기)는 API 전용. 앞단 프록시는 /ws만 넘긴다. 오늘 숫자와 막은 주소는 ParkWatch 메모리에만
   - 장난치기(prank, answer, calm): 거리, 횟수, 무시 차단은 서버(Channel.prank, answer)가 판정하고, 밀려나기나 올라타기는 각자 자기 앵무만 움직인다. 규약 8장
 - 운영: 화면은 GitHub Pages(anglog.nobody-asked.dev, .github/workflows/pages.yml, 404.html은 index.html 복사본). API와 실시간은 서버(api.anglog.nobody-asked.dev)

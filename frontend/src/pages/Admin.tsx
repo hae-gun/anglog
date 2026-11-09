@@ -1,7 +1,7 @@
 import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { api } from '../api';
-import { AdminComment, AdminDay, AdminGuestbook, AdminOverview, AdminUser, ApiError, ParkState, Post, SPECIES } from '../api/types';
+import { AdminComment, AdminDay, AdminGuestbook, AdminOverview, AdminUser, ApiError, MetamoaEvent, ParkState, Post, SPECIES } from '../api/types';
 import { useSession } from '../session';
 
 // 관리: 앵로그(집사, 일기, 댓글, 방명록)와 앵파크(지금 노는 앵무). 서버의 ADMIN_HANDLES에 있는 아이디만 들어온다.
@@ -470,10 +470,128 @@ function Park() {
         </section>
       ))}
       {!state.channels.some((c) => c.birds.length) && <p className="empty">지금 공원에 아무도 없어요.</p>}
+      <Metamoa />
       <p className="muted admin-note">
         5초마다 새로 읽어요. 주소는 실제 주소가 아니라 짧게 바꾼 값이라, 같은 값이면 같은 곳에서 들어온 앵무예요.
         휴대폰 데이터로 들어온 사람들은 여러 명이 같은 주소를 쓰기도 해서, 오래 막으면 다른 사람까지 막힐 수 있어요.
       </p>
     </>
+  );
+}
+
+// ---- 메타모아(metamoa.com) 목록: 소식과 이벤트. 접속자 수는 실시간 서버가 10분마다 보낸다 ----
+
+const todayKst = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+
+function Metamoa() {
+  const [info, setInfo] = useState<{ enabled: boolean; spaceId: string } | null>(null);
+  const [events, setEvents] = useState<MetamoaEvent[]>([]);
+  const [text, setText] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [ev, setEv] = useState({ title: '', desc: '', from: todayKst(), to: todayKst(), dailyFrom: '21:00', dailyTo: '22:00', daily: true });
+
+  useEffect(() => {
+    api.admin.metamoa().then((i) => {
+      setInfo(i);
+      if (i.enabled) api.admin.metamoaEvents().then((r) => setEvents(r.events)).catch((e) => setMsg(errText(e)));
+    }).catch((e) => setMsg(errText(e)));
+  }, []);
+
+  const run = async (fn: () => Promise<string>) => {
+    setBusy(true);
+    setMsg('');
+    try {
+      setMsg(await fn());
+    } catch (e) {
+      setMsg(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const postNews = () => run(async () => {
+    const r = await api.admin.metamoaUpdate(text.trim());
+    setText('');
+    return `소식을 올렸어요.${r.shown_until ? ` ${when(r.shown_until)}까지 보여요.` : ''}`;
+  });
+
+  const addEvent = () => run(async () => {
+    // a one-day event runs the whole day (Korea time); with daily hours it opens only in that window
+    const body = {
+      title: ev.title.trim(),
+      ...(ev.desc.trim() ? { desc: ev.desc.trim() } : {}),
+      starts_at: `${ev.from}T00:00:00+09:00`,
+      ends_at: `${ev.to}T23:59:00+09:00`,
+      ...(ev.daily ? { daily_from: ev.dailyFrom, daily_to: ev.dailyTo } : {}),
+      url: 'https://anglog.nobody-asked.dev/park',
+    };
+    const r = await api.admin.metamoaAddEvent(body);
+    setEvents((old) => [...old, r.event]);
+    setEv((o) => ({ ...o, title: '', desc: '' }));
+    return '이벤트를 올렸어요.';
+  });
+
+  const removeEvent = (id: string) => {
+    if (!window.confirm('이 이벤트를 메타모아에서 내릴까요?')) return;
+    run(async () => {
+      await api.admin.metamoaDeleteEvent(id);
+      setEvents((old) => old.filter((x) => x.id !== id));
+      return '이벤트를 내렸어요.';
+    });
+  };
+
+  if (!info) return null;
+  return (
+    <section className="card admin-metamoa">
+      <h2 className="admin-sub">메타모아 <span className="muted">metamoa.com 목록</span></h2>
+      {!info.enabled ? (
+        <p className="muted">아직 연결 전이에요. 등록이 승인되고 소유자 확인을 마친 뒤, 서버의 infra/.env에 METAMOA_KEY와 METAMOA_SPACE_ID를 넣고 배포하면 여기서 소식과 이벤트를 올릴 수 있어요. 접속자 수는 그때부터 10분마다 자동으로 보내요.</p>
+      ) : (
+        <>
+          <p className="muted">공간 {info.spaceId}. 접속자 수는 실시간 서버가 10분마다 보내요.</p>
+          <label className="field">
+            <span>새 소식 (하루 한 번, 200자 3줄까지, 7일 동안 보여요)</span>
+            <textarea className="textarea" rows={3} maxLength={200} value={text} onChange={(e) => setText(e.target.value)}
+              placeholder="예: 앵무끼리 장난치기가 생겼어요. 콕 찌르고 밀치고 머리 위에 올라타 보세요" />
+          </label>
+          <div className="row">
+            <button className="btn primary" disabled={busy || !text.trim() || text.split('\n').length > 3} onClick={postNews}>소식 올리기</button>
+          </div>
+
+          <h3 className="admin-sub3">이벤트</h3>
+          {events.length ? (
+            <ul className="admin-events">
+              {events.map((e) => (
+                <li key={e.id}>
+                  <div>
+                    <b>{e.title}</b>{e.desc && <span className="muted"> {e.desc}</span>}
+                    <div className="muted">{when(e.starts_at)} ~ {when(e.ends_at)}{e.daily_from ? `, 매일 ${e.daily_from}~${e.daily_to}` : ''}</div>
+                  </div>
+                  <button className="btn small danger" disabled={busy} onClick={() => removeEvent(e.id)}>내리기</button>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="muted">올린 이벤트가 없어요. 진행 중이면 메타모아 첫 화면에 「지금 이벤트 진행 중」으로 떠요.</p>}
+          <div className="admin-event-form">
+            <input className="input" maxLength={30} value={ev.title} onChange={(e) => setEv({ ...ev, title: e.target.value })} placeholder="제목 (30자)" aria-label="이벤트 제목" />
+            <input className="input" maxLength={40} value={ev.desc} onChange={(e) => setEv({ ...ev, desc: e.target.value })} placeholder="한 줄 설명 (40자, 링크 안 됨)" aria-label="이벤트 설명" />
+            <div className="row">
+              <label className="field"><span>시작일</span><input className="input" type="date" value={ev.from} onChange={(e) => setEv({ ...ev, from: e.target.value })} /></label>
+              <label className="field"><span>끝나는 날</span><input className="input" type="date" value={ev.to} onChange={(e) => setEv({ ...ev, to: e.target.value })} /></label>
+            </div>
+            <label className="admin-check"><input type="checkbox" checked={ev.daily} onChange={(e) => setEv({ ...ev, daily: e.target.checked })} /> 매일 정해진 시각에만</label>
+            {ev.daily && (
+              <div className="row">
+                <label className="field"><span>매일 시작</span><input className="input" type="time" value={ev.dailyFrom} onChange={(e) => setEv({ ...ev, dailyFrom: e.target.value })} /></label>
+                <label className="field"><span>매일 끝</span><input className="input" type="time" value={ev.dailyTo} onChange={(e) => setEv({ ...ev, dailyTo: e.target.value })} /></label>
+              </div>
+            )}
+            <button className="btn" disabled={busy || !ev.title.trim() || ev.to < ev.from || (ev.daily && ev.dailyFrom === ev.dailyTo)} onClick={addEvent}>이벤트 올리기</button>
+          </div>
+        </>
+      )}
+      {msg && <p className="admin-msg" role="status">{msg}</p>}
+    </section>
   );
 }

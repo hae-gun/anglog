@@ -49,3 +49,8 @@ angpark:
   token-secret: ${PARK_TOKEN_SECRET:local-dev-park-secret}
   # how long an owner's last spot is kept, so the bird comes back there
   spot-memory-ms: 1800000
+
+# metamoa.com 접속자 수 보내기(10분마다). 키와 공간 id가 없으면 꺼져 있다
+metamoa:
+  key: ${METAMOA_KEY:}
+  space-id: ${METAMOA_SPACE_ID:}

@@ -33,8 +33,10 @@ public class AdminController {
     private final AdminGuard guard;
     private final AdminService admin;
     private final RealtimeAdmin park;
+    private final Metamoa metamoa;
 
-    public AdminController(AdminGuard guard, AdminService admin, RealtimeAdmin park) {
+    public AdminController(AdminGuard guard, AdminService admin, RealtimeAdmin park, Metamoa metamoa) {
+        this.metamoa = metamoa;
         this.guard = guard;
         this.admin = admin;
         this.park = park;
@@ -132,6 +134,53 @@ public class AdminController {
         int minutes = req.minutes() == null ? 60 : Math.max(0, Math.min(req.minutes(), 24 * 60));
         JsonNode out = park.kick(req.channel(), req.pid(), minutes);
         log.info("admin {} kicked bird {} in channel {} for {} minutes", by, req.pid(), req.channel(), minutes);
+        return out;
+    }
+
+    // ---- metamoa.com: news and events for our listing ----
+
+    public record MetamoaUpdateRequest(String text) {
+    }
+
+    @GetMapping("/metamoa")
+    public java.util.Map<String, Object> metamoa(@LoginUser Long userId) {
+        guard.require(userId);
+        return java.util.Map.of("enabled", metamoa.enabled(), "spaceId", metamoa.spaceId());
+    }
+
+    /** News on metamoa's "신규, 업데이트" row: 200 characters, 3 lines, once a day, shown for 7 days. */
+    @PostMapping("/metamoa/update")
+    public JsonNode metamoaUpdate(@LoginUser Long userId, @RequestBody MetamoaUpdateRequest req) {
+        String by = guard.require(userId).getHandle();
+        String text = req.text() == null ? "" : req.text().strip();
+        if (text.isEmpty() || text.length() > 200 || text.lines().count() > 3) {
+            throw ApiException.badRequest("BAD_TEXT", "소식은 200자, 3줄까지 적어 주세요.");
+        }
+        JsonNode out = metamoa.postUpdate(text);
+        log.info("admin {} posted news to metamoa", by);
+        return out;
+    }
+
+    @GetMapping("/metamoa/events")
+    public JsonNode metamoaEvents(@LoginUser Long userId) {
+        guard.require(userId);
+        return metamoa.events();
+    }
+
+    /** title, desc, starts_at, ends_at, daily_from, daily_to, url: checked by metamoa, passed as written. */
+    @PostMapping("/metamoa/events")
+    public JsonNode metamoaAddEvent(@LoginUser Long userId, @RequestBody JsonNode event) {
+        String by = guard.require(userId).getHandle();
+        JsonNode out = metamoa.addEvent(event);
+        log.info("admin {} added a metamoa event", by);
+        return out;
+    }
+
+    @DeleteMapping("/metamoa/events/{eventId}")
+    public JsonNode metamoaDeleteEvent(@LoginUser Long userId, @PathVariable String eventId) {
+        String by = guard.require(userId).getHandle();
+        JsonNode out = metamoa.deleteEvent(eventId);
+        log.info("admin {} deleted metamoa event {}", by, eventId);
         return out;
     }
 }
