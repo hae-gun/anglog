@@ -9,6 +9,18 @@ function tone(hex: string, k: number) {
   return '#' + ch.map((v) => Math.min(255, Math.max(0, v)).toString(16).padStart(2, '0')).join('');
 }
 
+/** Only green and blue lovebirds have the blue rump (not yellow or white ones). */
+function greenOrBlue(hex: string) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  if (d === 0) return false;
+  const sat = d / (1 - Math.abs(2 * l - 1));
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = ((h * 60 + 360) % 360) / 360;
+  return sat >= 0.25 && l <= 0.85 && h >= 0.2 && h <= 0.7;
+}
+
 // tail outlines per species: short round fan, or long and pointed
 const TAILS: Record<string, string> = {
   short: 'M19 39 L9 47 Q11 50 14 48 L22 42z',
@@ -32,7 +44,7 @@ export function BirdAvatar({ colors = DEFAULT, species, title }: { colors?: Parr
       <rect width="64" height="56" fill="#CFE3F5" />
       <rect x="4" y="47" width="56" height="4" rx="2" fill="#9C7048" />
       <path d={TAILS[tail]} fill={c.tail} />
-      {(species === 'LOVEBIRD' || species === 'OTHER' || !species) && <ellipse cx="20" cy="38" rx="4" ry="3" fill="#4A8FD1" />}
+      {(species === 'LOVEBIRD' || !species) && greenOrBlue(c.body) && <ellipse cx="21" cy="37" rx="3" ry="2" fill="#4A8FD1" />}
       {/* upright teardrop body */}
       <ellipse cx="29" cy="33" rx="15" ry="11" transform="rotate(-38 29 33)" fill={c.body} />
       <ellipse cx="34" cy="34" rx="9" ry="8" transform="rotate(-38 34 34)" fill={chest} />

@@ -2,7 +2,7 @@
 // (teardrop body, folded wings with flight feathers, hooked beak, two toes forward and two back,
 // species tails and real size differences) while keeping the big head and round shiny eyes.
 // Colors come from the owner's customizer (face, head, body, wing, tail); the species sets the shape:
-//   LOVEBIRD  15 cm. short and round, short rounded tail, blue rump, big pale beak
+//   LOVEBIRD  15 cm. short and round, short rounded tail, blue rump (green and blue birds only), big pale beak
 //   BUDGIE    18 cm, the lightest. slim, two long pointed tail feathers, barred head and wings,
 //             cere, purple cheek patches, throat spots, small beak half hidden in feathers
 //   COCKATIEL 31 cm. stands upright, tall curving crest, orange cheeks, white wing patch, very long tail
@@ -114,6 +114,14 @@ function feather(parent, hex, [x, y, z], len, width, thick, droop, yaw, line, fl
   return m;
 }
 
+/** Blue rump colour for a green (or blue) lovebird body, null for other bodies. */
+export function rumpColor(body) {
+  const hsl = {};
+  new THREE.Color(body).getHSL(hsl);
+  if (hsl.s < 0.25 || hsl.l > 0.85 || hsl.h < 0.2 || hsl.h > 0.7) return null;
+  return '#4A8FD1';
+}
+
 /** Little crescent marks on a surface: barring, scallops. */
 function marks(parent, hex, list, size) {
   list.forEach(([x, y, z, rz = 0]) => blob(parent, hex, x, y, z, size[0], size[1], size[2], rz, 0, SPH_LO));
@@ -210,7 +218,10 @@ export function makeBird(colors, species) {
   blob(torso, c.body, -bx * 0.62, -by * 0.12, 0, bx * 0.6, by * 0.58, bz * 0.72, 0.12, LW);
   const chest = blob(torso, bellyC, 0.15, -0.07, 0, bx * 0.74, by * 0.76, bz * 0.85, 0.2);
   if (species === 'GREEN_CHEEKED_CONURE') blob(torso, '#8E3B34', -bx * 0.1, -by * 0.62, 0, bx * 0.45, by * 0.4, bz * 0.7, 0.1);
-  if (species === 'LOVEBIRD' || species === 'OTHER') blob(torso, '#4A8FD1', -bx * 0.86, by * 0.12, 0, 0.17, 0.12, 0.17, 0.3);
+  // the blue rump of green lovebirds (blue ones too). Yellow, white or other colour mutations have none,
+  // so it only shows when the body is green or blue, small and low on the back where the wings almost cover it
+  const rump = rumpColor(c.body);
+  if (species === 'LOVEBIRD' && rump) blob(torso, rump, -bx * 0.78, by * 0.28, 0, 0.11, 0.06, 0.12, 0.25);
 
   // tail: feathers fanned from the root, middle ones longest
   const T = S.tail;
