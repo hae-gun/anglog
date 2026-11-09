@@ -301,7 +301,7 @@ img { max-width: 100%; display: block; }
 .room-tag-live { background: #2F6FB0; }
 .park-controls { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; padding: 0 12px calc(14px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; pointer-events: none; }
 .park-controls > * { pointer-events: auto; }
-.stick { width: 118px; height: 118px; flex: none; border-radius: 50%; background: rgba(255, 248, 236, 0.35); border: 2px solid rgba(43, 38, 34, 0.55); display: grid; place-items: center; touch-action: none; }
+.stick { width: 104px; height: 104px; flex: none; border-radius: 50%; background: rgba(255, 248, 236, 0.35); border: 2px solid rgba(43, 38, 34, 0.55); display: grid; place-items: center; touch-action: none; }
 .stick-knob { width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 248, 236, 0.95); border: 2px solid var(--ink); box-shadow: 2px 2px 0 var(--ink); pointer-events: none; }
 .park-buttons { display: grid; grid-template-columns: repeat(2, 76px); gap: 8px; }
 .pbtn { min-height: 46px; padding: 0 6px; border: 2px solid var(--ink); border-radius: 14px; background: rgba(255, 248, 236, 0.95); box-shadow: 2px 2px 0 var(--ink); font: 15px/1 var(--display); touch-action: manipulation; }
@@ -318,7 +318,7 @@ img { max-width: 100%; display: block; }
 .bird-pick-item[aria-pressed='true'] { background: var(--seed); }
 .bird-pick-item svg { width: 64px; height: 64px; }
 .bird-pick-item span { font-size: 12.5px; color: var(--muted); }
-.park-climb { position: absolute; z-index: 3; right: 12px; bottom: calc(232px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; }
+.park-climb { position: absolute; z-index: 3; right: 12px; bottom: calc(190px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; }
 .park-climb .pbtn { width: 76px; min-height: 44px; background: #CFE3F5; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .park-pop { position: absolute; z-index: 4; left: 8px; right: 8px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 520px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 12px; background: rgba(255, 248, 236, 0.97); }
 .park-pop > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -336,6 +336,15 @@ img { max-width: 100%; display: block; }
 @keyframes prank-in { from { transform: translateY(12px) rotate(-1.5deg); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes prank-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { .park-prank { animation: none; } }
+.park-actions { position: relative; width: 168px; height: 156px; flex: none; }
+.rbtn { position: absolute; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: rgba(255, 248, 236, 0.88); box-shadow: 2px 2px 0 var(--ink); font: 14px/1 var(--display); touch-action: manipulation; padding: 0; }
+.rbtn.fly { right: 0; bottom: 0; width: 80px; height: 80px; background: var(--seed); font-size: 18px; }
+.rbtn.fly[aria-pressed='true'] { background: #CFE3F5; }
+.rbtn.chirp { right: 88px; bottom: 2px; width: 58px; height: 58px; }
+.rbtn.prank { right: 74px; bottom: 70px; width: 58px; height: 58px; }
+.rbtn.more { right: 8px; bottom: 96px; width: 52px; height: 52px; font-size: 12.5px; background: rgba(255, 248, 236, 0.75); }
+.park-more { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.park-more .pbtn { min-height: 52px; font-size: 16px; }
 .park-calm { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 14px; }
 .park-calm input { width: 18px; height: 18px; }
 .park-tudak { background: #FFF3C4; }

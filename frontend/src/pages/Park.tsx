@@ -115,7 +115,7 @@ export function ParkPage() {
   const [rooms, setRooms] = useState<RoomCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guest, setGuest] = useState<GuestBird>(loadGuestBird);
-  const [sheet, setSheet] = useState<null | 'list' | 'dress' | 'say' | 'birds' | 'prank'>(null);
+  const [sheet, setSheet] = useState<null | 'list' | 'dress' | 'say' | 'birds' | 'prank' | 'more'>(null);
   const [calm, setCalm] = useState(() => readKey(CALM_KEY) === '1');
   const calmRef = useRef(calm);
   calmRef.current = calm;
@@ -348,6 +348,34 @@ export function ParkPage() {
     if (!ctl.current?.enter(handle)) navigate(`/play/${handle}`);
   }
   const joinHref = me ? '/parrots/new' : '/login?mode=signup&next=/park';
+  function toggleView() {
+    const next = view === 'first' ? 'third' : 'first';
+    setView(next);
+    writeKey(VIEW_KEY, next);
+    ctl.current?.setView(next);
+  }
+  function openPrank() {
+    const t = ctl.current?.prankTarget();
+    setPrankTarget(t ? t.name : null);
+    setSheet('prank');
+  }
+  // the rest of the buttons live in one sheet, so the park stays in view
+  const more: { label: string; run: () => void }[] = [
+    { label: '말하기', run: () => setSheet('say') },
+    { label: '같이 놀기', run: () => {
+      setSheet(null);
+      if (ctl.current?.playTogether() == null) setToast('근처에 같이 놀 앵무가 없어요.');
+      else net.current?.emote('dance');
+    } },
+    { label: '간식', run: () => { setSheet(null); if (ctl.current?.snack() === 'wait') setToast('방금 줬어요. 다 먹고 나면 또 줘요.'); } },
+    myBird && me
+      ? { label: '내 집', run: () => { setSheet(null); if (!ctl.current?.enter(me.handle)) navigate(`/play/${me.handle}`); } }
+      : { label: '꾸미기', run: () => setSheet('dress') },
+    { label: '아무 집', run: () => { setSheet(null); surf(); } },
+    { label: '집 목록', run: () => setSheet('list') },
+    { label: view === 'first' ? '3인칭으로' : '1인칭으로', run: () => { setSheet(null); toggleView(); } },
+    { label: muted ? '소리 켜기' : '소리 끄기', run: () => { setMuted(!muted); setMute(!muted); } },
+  ];
 
   const followed = rooms?.filter((r) => r.following) ?? [];
   const neighbours = rooms?.filter((r) => !r.following) ?? [];
@@ -371,13 +399,6 @@ export function ParkPage() {
             <span className="dot" style={{ background: visitor.colors.body }} aria-hidden="true" />{visitor.name}
           </button>
         )}
-        <button className="play-chip" aria-pressed={view === 'first'} onClick={() => {
-          const next = view === 'first' ? 'third' : 'first';
-          setView(next);
-          writeKey(VIEW_KEY, next);
-          ctl.current?.setView(next);
-        }} aria-label={view === 'first' ? '3인칭으로 바꾸기' : '1인칭으로 바꾸기'}>{view === 'first' ? '3인칭' : '1인칭'}</button>
-        <button className="play-chip" onClick={() => { setMuted(!muted); setMute(!muted); }} aria-pressed={!muted}>{muted ? '소리 끔' : '소리 켬'}</button>
       </div>
 
       {error && hint && <p className="play-note park-note" role="alert">{error}</p>}
@@ -435,30 +456,18 @@ export function ParkPage() {
 
       <div className="park-controls">
         <Joystick onChange={(x, y) => ctl.current?.setInput(x, y)} />
-        <div className="park-buttons" role="group" aria-label="앵파크에서 놀기">
-          <button className="pbtn fly" onClick={() => setFlying(!!ctl.current?.toggleFly())} aria-pressed={flying}>{flying ? '내리기' : '날기'}</button>
-          <button className="pbtn" onClick={() => { ctl.current?.chirp(); net.current?.emote('chirp'); }}>짹짹</button>
-          <button className="pbtn" onClick={() => setSheet('say')}>말하기</button>
-          <button className="pbtn" onClick={() => {
-            if (ctl.current?.playTogether() == null) setToast('근처에 같이 놀 앵무가 없어요.');
-            else net.current?.emote('dance');
-          }}>같이 놀기</button>
-          <button className="pbtn" onClick={() => { const t = ctl.current?.prankTarget(); setPrankTarget(t ? t.name : null); setSheet('prank'); }}>장난</button>
-          <button className="pbtn" onClick={() => { if (ctl.current?.snack() === 'wait') setToast('방금 줬어요. 다 먹고 나면 또 줘요.'); }}>간식</button>
-          <div className="park-small">
-            {myBird && me
-              ? <button className="pbtn small" onClick={() => { if (!ctl.current?.enter(me.handle)) navigate(`/play/${me.handle}`); }}>내 집</button>
-              : <button className="pbtn small" onClick={() => setSheet('dress')}>꾸미기</button>}
-            <button className="pbtn small" onClick={surf}>아무 집</button>
-            <button className="pbtn small" onClick={() => setSheet('list')}>집 목록</button>
-          </div>
+        <div className="park-actions" role="group" aria-label="앵파크에서 놀기">
+          <button className="rbtn fly" onClick={() => setFlying(!!ctl.current?.toggleFly())} aria-pressed={flying}>{flying ? '내리기' : '날기'}</button>
+          <button className="rbtn chirp" onClick={() => { ctl.current?.chirp(); net.current?.emote('chirp'); }}>짹짹</button>
+          <button className="rbtn prank" onClick={openPrank}>장난</button>
+          <button className="rbtn more" onClick={() => setSheet('more')} aria-label="더 보기: 말하기, 같이 놀기, 간식, 집, 시점, 소리">더보기</button>
         </div>
       </div>
 
       {sheet && (
         <div className="sheet-backdrop" onClick={() => setSheet(null)}>
           <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-            aria-label={sheet === 'list' ? '집 목록' : sheet === 'say' ? '말하기' : sheet === 'birds' ? '앵무 바꾸기' : sheet === 'prank' ? '장난치기' : '앵무 꾸미기'}>
+            aria-label={sheet === 'list' ? '집 목록' : sheet === 'say' ? '말하기' : sheet === 'birds' ? '앵무 바꾸기' : sheet === 'prank' ? '장난치기' : sheet === 'more' ? '더 보기' : '앵무 꾸미기'}>
             <button className="sheet-close btn ghost small" onClick={() => setSheet(null)}>닫기</button>
 
             {sheet === 'birds' && (
@@ -475,6 +484,12 @@ export function ParkPage() {
                   ))}
                 </div>
               </>
+            )}
+
+            {sheet === 'more' && (
+              <div className="park-more">
+                {more.map((m) => <button key={m.label} className="pbtn" onClick={m.run}>{m.label}</button>)}
+              </div>
             )}
 
             {sheet === 'prank' && (
