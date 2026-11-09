@@ -229,6 +229,16 @@ img { max-width: 100%; display: block; }
 .preview-bird { display: grid; place-items: center; padding: 8px; border: 2px dashed var(--ink); border-radius: var(--radius); background: var(--card); }
 .preview-bird svg { width: 140px; height: 120px; }
 
+/* photo color picker in the parrot form */
+.photo-pick { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 2px dashed var(--ink); border-radius: var(--radius); background: var(--leaf-soft); }
+.photo-pick.over { background: #FFF3C4; border-style: solid; }
+.photo-thumb { width: 76px; height: 76px; flex: none; object-fit: cover; border: 2px solid var(--ink); border-radius: 12px; background: var(--card); }
+.photo-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1; }
+.photo-title { margin: 0; font: 16px/1.35 var(--display); }
+.photo-palette { display: flex; height: 18px; border: 2px solid var(--ink); border-radius: 9px; overflow: hidden; }
+.photo-palette span { flex-basis: 0; min-width: 6px; }
+.photo-body .hint { font-size: 12.5px; color: var(--muted); }
+
 .center { display: grid; place-items: center; min-height: 60dvh; color: var(--muted); }
 .hero { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
 .hero h1 { margin: 0; font: 32px/1.2 var(--display); text-wrap: balance; }

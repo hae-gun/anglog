@@ -1,5 +1,6 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { ParrotColors, ParrotInput, Species, SPECIES } from '../api';
+import { analyzePhoto, partsFor, PhotoAnalysis } from '../lib/photoColors';
 import { BirdAvatar } from './BirdAvatar';
 
 /** Typical colors per species, used as a starting point when the species is picked. */
@@ -41,6 +42,72 @@ function randomColors(): ParrotColors {
   };
 }
 
+const speciesLabel = (s: Species) => SPECIES.find((x) => x.value === s)?.label ?? '기타';
+
+interface PhotoState {
+  url: string;
+  analysis: PhotoAnalysis;
+  /** what the form had before the photo, for the undo button */
+  before: { species: Species; colors: ParrotColors };
+}
+
+/**
+ * Picks colors (and a species guess) from a parrot photo: choose a file, paste one, or drop one.
+ * The photo is read on this device only and is not uploaded or kept.
+ */
+function PhotoPicker({ photo, busy, error, onFile, onUndo }: {
+  photo: PhotoState | null; busy: boolean; error: string | null; onFile: (f: File) => void; onUndo: () => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const a = photo?.analysis;
+  let verdict = '';
+  if (a) {
+    if (!a.species) verdict = '종은 잘 모르겠어요. 아래에서 골라 주세요. 색은 사진에서 가져왔어요.';
+    else if (a.confident) verdict = `${speciesLabel(a.species)} 같아요. 색도 사진에서 가져왔어요.`;
+    else {
+      const alt = a.ranking[1] && a.ranking[1].score >= 0.15 ? `, ${speciesLabel(a.ranking[1].species)}일 수도 있어요` : '';
+      verdict = `아마 ${speciesLabel(a.species)}${alt}. 다르면 아래에서 종을 바꿔 주세요.`;
+    }
+  }
+  return (
+    <div className={`photo-pick${over ? ' over' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const f = Array.from(e.dataTransfer.files).find((x) => x.type.startsWith('image/'));
+        if (f) onFile(f);
+      }}>
+      <input ref={input} type="file" accept="image/*" hidden
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }} />
+      {photo && <img src={photo.url} alt="올린 앵무 사진" className="photo-thumb" />}
+      <div className="photo-body">
+        {!photo && !busy && <p className="photo-title">사진으로 색 찾기</p>}
+        {busy && <p className="photo-title" role="status">사진 보는 중</p>}
+        {photo && !busy && a && (
+          <>
+            <p className="photo-title" role="status">{verdict}</p>
+            {a.caution && <p className="hint">{a.caution}</p>}
+            <div className="photo-palette" aria-label="사진에서 찾은 색">
+              {a.clusters.slice(0, 6).map((c) => <span key={c.hex + c.share} style={{ background: c.hex, flexGrow: Math.max(0.4, c.share * 10) }} title={c.hex} />)}
+            </div>
+          </>
+        )}
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="row">
+          <button type="button" className="btn small primary" disabled={busy} onClick={() => input.current?.click()}>
+            {photo ? '다른 사진' : '사진 고르기'}
+          </button>
+          {photo && <button type="button" className="btn small" onClick={onUndo}>되돌리기</button>}
+        </div>
+        {!photo && <span className="hint">사진을 붙여넣거나 여기에 끌어다 놓아도 돼요. 사진은 이 기기에서만 보고 어디에도 올리지 않아요.</span>}
+      </div>
+    </div>
+  );
+}
+
 /** compact: name, species and colors only (the guest bird in the park). */
 export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: { initial?: ParrotInput; submitLabel: string; onSubmit: (v: ParrotInput) => Promise<void>; compact?: boolean }) {
   const [v, setV] = useState<ParrotInput>(
@@ -48,6 +115,49 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<PhotoState | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const latest = useRef(v);
+  latest.current = v;
+
+  async function readPhoto(file: File) {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const analysis = await analyzePhoto(file);
+      const cur = latest.current;
+      const species = analysis.species ?? cur.species;
+      setV({ ...cur, species, colors: partsFor(analysis, species, SPECIES_COLORS[species]) });
+      // the old preview address is released by the effect below
+      setPhoto((old) => ({ url: URL.createObjectURL(file), analysis, before: old ? old.before : { species: cur.species, colors: cur.colors } }));
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : '사진을 읽지 못했어요.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  function undoPhoto() {
+    if (!photo) return;
+    setV({ ...latest.current, ...photo.before });
+    setPhoto(null);
+  }
+
+  // a pasted image anywhere on the page goes to the photo picker; pasted text stays where it was
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const f = Array.from(e.clipboardData?.files ?? []).find((x) => x.type.startsWith('image/'));
+      if (!f) return;
+      e.preventDefault();
+      readPhoto(f);
+    }
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+    // readPhoto only reads refs and setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => () => { if (photo) URL.revokeObjectURL(photo.url); }, [photo]);
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
 
   async function submit(e: FormEvent) {
@@ -76,12 +186,18 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
         <input id="pname" className="input" maxLength={20} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="머란이" />
       </div>
 
+      <PhotoPicker photo={photo} busy={photoBusy} error={photoError} onFile={readPhoto} onUndo={undoPhoto} />
+
       <div className="field">
         <span className="label" id="species-label">종</span>
         <div className="chips" role="group" aria-labelledby="species-label">
           {SPECIES.map((s) => (
             <button type="button" key={s.value} className="chip" aria-pressed={v.species === s.value}
-              onClick={() => setV({ ...v, species: s.value, colors: initial ? v.colors : SPECIES_COLORS[s.value] })}>
+              onClick={() => setV({
+                ...v, species: s.value,
+                // with a photo, the same photo colors move to where this species wears them
+                colors: photo ? partsFor(photo.analysis, s.value, SPECIES_COLORS[s.value]) : initial ? v.colors : SPECIES_COLORS[s.value],
+              })}>
               {s.label}
             </button>
           ))}
