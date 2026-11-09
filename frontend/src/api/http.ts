@@ -26,10 +26,22 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     (init.headers as Record<string, string>)['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
   }
-  const res = await fetch(API_BASE + url, init);
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + url, init);
+  } catch {
+    // the server is down, the network dropped, or the browser blocked the call (the raw message is "Failed to fetch")
+    throw new ApiError(0, 'NETWORK', '앵로그 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+  }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  let data: { code?: string; message?: string } | undefined;
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    // an HTML error page from a proxy (502 while the server restarts, and so on)
+    throw new ApiError(res.status, 'UNAVAILABLE', '앵로그 서버가 잠시 대답하지 않아요. 조금 뒤 다시 시도해 주세요.');
+  }
   if (!res.ok) {
     throw new ApiError(res.status, data?.code ?? 'ERROR', data?.message ?? '요청을 처리하지 못했어요.');
   }
