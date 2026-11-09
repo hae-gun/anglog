@@ -25,6 +25,10 @@ public class User {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /** BCrypt hash, or null for accounts made with the development login. */
+    @Column(name = "password_hash", length = 100)
+    private String passwordHash;
+
     protected User() {
     }
 
@@ -32,6 +36,14 @@ public class User {
         this.handle = handle;
         this.nickname = nickname;
         this.createdAt = createdAt;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
     }
 
     public Long getId() {

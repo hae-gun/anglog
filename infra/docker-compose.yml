@@ -1,0 +1,82 @@
+# 앵로그 운영 스택: PostgreSQL, 앵로그 API, 앵파크 실시간 서버, 웹(빌드한 화면 + 안쪽 프록시)
+#
+# TLS는 이 스택 밖의 앞단 Nginx(지금은 고해야지 app 서버의 Nginx)가 맡고,
+# 그 Nginx는 anglog-edge 네트워크로 web 컨테이너 하나에만 붙는다. db, api, realtime은 밖에서 보이지 않는다.
+# 포트를 호스트에 열지 않는다 (Docker는 0.0.0.0으로 연 포트에 방화벽을 우회하는 규칙을 만든다).
+#
+# 처음 한 번: cp .env.example .env 후 값 채우기 → README 순서대로
+name: anglog
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: anglog
+      POSTGRES_USER: anglog
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?infra/.env에 DB_PASSWORD를 넣으세요}
+    # 작은 서버라 메모리를 아껴 쓴다
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=40"]
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anglog -d anglog"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: ../backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/anglog
+      DB_USER: anglog
+      DB_PASSWORD: ${DB_PASSWORD}
+      # 개발용 로그인(아이디만으로 들어가기)은 운영에서 반드시 끈다
+      DEV_LOGIN_ENABLED: "false"
+      COOKIE_SECURE: "true"
+      STORAGE_DIR: /data/media
+    volumes:
+      - media:/data/media
+    # 힙은 이 값의 75% (Dockerfile)
+    mem_limit: 640m
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  realtime:
+    build: ../realtime
+    environment:
+      ANGPARK_ALLOWED_ORIGINS: https://${DOMAIN:?infra/.env에 DOMAIN을 넣으세요}
+      # 이름 금칙어 목록(한 줄에 하나). 없으면 거르지 않는다. 파일은 git에 넣지 않는다
+      ANGPARK_BLOCKED_WORDS_FILE: /data/blocked-words.txt
+    volumes:
+      - ./blocked-words.txt:/data/blocked-words.txt:ro,z
+    mem_limit: 384m
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../frontend
+      args:
+        VITE_REALTIME_URL: wss://${DOMAIN}/ws
+    networks:
+      default: {}
+      edge:
+        aliases: [anglog-web]
+    mem_limit: 64m
+    depends_on: [api, realtime]
+    restart: unless-stopped
+
+volumes:
+  pg-data: {}
+  # 올린 사진. pg-data와 함께 백업 대상
+  media: {}
+
+networks:
+  default: {}
+  # 앞단 Nginx와 web만 붙는 네트워크. 처음 한 번 만든다: docker network create anglog-edge
+  edge:
+    external: true
+    name: anglog-edge

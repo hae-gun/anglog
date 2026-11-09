@@ -70,6 +70,8 @@ users, parrots, posts(+post_images), post_likes, comments, follows, guestbook_en
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | POST | /api/auth/dev-login | {handle, nickname} 개발용 로그인 |
+| POST | /api/auth/signup | 가입 (아이디, 닉네임, 비밀번호 8~64자) 후 바로 로그인 |
+| POST | /api/auth/login | 로그인. 같은 IP에서 한 아이디로 8번, 전체 30번 틀리면 10분 막음 |
 | GET | /api/auth/me | 로그인한 사용자 (없으면 204) |
 | POST | /api/auth/logout | |
 | GET | /api/parrots/mine | 내 앵무 |

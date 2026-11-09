@@ -126,6 +126,8 @@ export type FeedTab = 'latest' | 'following';
 export interface Api {
   me(): Promise<UserSummary | null>;
   devLogin(handle: string, nickname: string): Promise<UserSummary>;
+  signUp(handle: string, nickname: string, password: string): Promise<UserSummary>;
+  login(handle: string, password: string): Promise<UserSummary>;
   logout(): Promise<void>;
 
   myParrots(): Promise<Parrot[]>;

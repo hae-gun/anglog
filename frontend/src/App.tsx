@@ -20,23 +20,6 @@ function RequireLogin({ children }: { children: ReactNode }) {
   return me ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
-const LANDED = 'anglog-landed';
-
-/** A first-time visitor without a login starts in 앵파크; after that "/" is the feed. */
-function Landing() {
-  const { me, loading } = useSession();
-  if (loading) return <div className="center">불러오는 중</div>;
-  let landed = true;
-  try {
-    landed = sessionStorage.getItem(LANDED) === '1';
-    sessionStorage.setItem(LANDED, '1');
-  } catch {
-    // storage blocked: just show the feed
-  }
-  if (!me && !landed) return <Navigate to="/park" replace />;
-  return <FeedPage />;
-}
-
 /** Old links to /visit go to the park, keeping ?at=. */
 function VisitRedirect() {
   const { search } = useLocation();
@@ -57,7 +40,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <Link to="/" className="logo"><img src="/icon.svg" alt="" />앵로그</Link>
+        <Link to="/feed" className="logo"><img src="/icon.svg" alt="" />앵로그</Link>
         <div className="row" style={{ alignItems: 'center' }}>
           {isMock && <span className="mock-badge">가짜 서버</span>}
           {!loading && !me && <Link className="btn small" to="/login">로그인</Link>}
@@ -66,7 +49,8 @@ export function App() {
 
       <main>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<Navigate to="/park" replace />} />
+          <Route path="/feed" element={<FeedPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/write" element={<RequireLogin><WritePage /></RequireLogin>} />
           <Route path="/post/:id" element={<PostDetailPage />} />
@@ -81,7 +65,7 @@ export function App() {
 
       <nav className="bottomnav" aria-label="주 메뉴">
         <div className="bottomnav-inner">
-          <NavLink to="/" end className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}><HomeIcon />홈</NavLink>
+          <NavLink to="/feed" end className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}><HomeIcon />홈</NavLink>
           <NavLink to="/park" className="navlink"><VisitIcon />앵파크</NavLink>
           <NavLink to="/write" className={({ isActive }) => `navlink write${isActive ? ' active' : ''}`} aria-label="일기 쓰기">
             <span className="plus"><PlusIcon /></span>

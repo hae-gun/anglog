@@ -30,6 +30,8 @@ const q = (params: Record<string, string | number | null | undefined>) => {
 export const httpApi: Api = {
   me: () => request<UserSummary | undefined>('GET', '/api/auth/me').then((u) => u ?? null),
   devLogin: (handle, nickname) => request('POST', '/api/auth/dev-login', { handle, nickname }),
+  signUp: (handle, nickname, password) => request('POST', '/api/auth/signup', { handle, nickname, password }),
+  login: (handle, password) => request('POST', '/api/auth/login', { handle, password }),
   logout: () => request('POST', '/api/auth/logout'),
 
   myParrots: () => request<Parrot[]>('GET', '/api/parrots/mine'),

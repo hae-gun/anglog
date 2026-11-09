@@ -8,17 +8,19 @@
 
 - backend/ : Spring Boot 3.3.5, Java 21, Gradle 8.10.2 래퍼, PostgreSQL + Flyway(db/migration), 테스트는 H2(PostgreSQL 모드)
   - 패키지: common(에러, 로그인 세션, 설정), user, parrot, post(이미지 저장 포함), social(좋아요, 댓글, 팔로우), room(방 조회, 방명록, 깃털)
-  - 로그인: 세션 쿠키 JJAK_SESSION. 컨트롤러는 `@LoginUser Long userId`(없으면 401) / `@LoginUser(required = false)`
+  - 로그인: 아이디와 비밀번호(BCrypt, /api/auth/signup, /api/auth/login, 실패가 많으면 10분 막음). 세션 쿠키 JJAK_SESSION. 컨트롤러는 `@LoginUser Long userId`(없으면 401) / `@LoginUser(required = false)`
+  - /api/auth/dev-login(아이디만으로 들어가기)은 개발과 테스트용. 운영(infra)에서는 DEV_LOGIN_ENABLED=false
   - JPA 엔티티는 연관관계 매핑 없이 id만 들고, 화면용 조합은 PostAssembler처럼 한 번에 모아서 조회
   - ddl-auto는 none, 스키마는 Flyway만 바꾼다. SQL은 PostgreSQL과 H2 둘 다 되는 문법만
 - realtime/ : 앵파크 실시간 서버. 독립 Spring Boot 앱(com.anglog.realtime), 순수 WebSocket /ws, 메모리만, 포트 8090
   - 채널(공원 하나, 정원 50) 안의 변경을 200ms마다 한 번에 묶어 보냄. 고해야지 realtime-server의 방식만 가져왔고 그 서버에는 의존하지 않는다
   - 말은 정해진 문구 번호만(frontend/src/lib/phrases.ts와 angpark.phrase-count를 같이 바꿀 것). 이름과 모양은 LookRules가 조용히 고친다
+- infra/ : 운영 구성(docker-compose: db, api, realtime, web), 수동 배포 스크립트(anglog-deploy), 백업. 앞단 TLS는 고해야지 app 서버의 Nginx를 같이 쓴다. 순서와 주의는 infra/README.md
 - frontend/ : Vite + React 18 + TS, react-router 6, three 0.128
   - src/api: types.ts(API 모양), http.ts(실서버), mock.ts(가짜 서버, `npm run dev:mock`)
   - src/room3d: 3D 방과 앵무 모델 (plain JS). scene.js 방 꾸밈, room.js 프로필 방, play.js 방에서 놀기, park.js 앵파크(가을 공원. 3인칭은 걸으면 카메라가 등 뒤로 따라 돌고, 버튼으로 1인칭 전환)
   - src/lib/parkNet.ts: 앵파크 실시간 클라이언트. VITE_REALTIME_URL이 없으면 dev에서는 ws://localhost:8090/ws, 가짜 서버 모드와 운영에서는 혼자 노는 모드
-  - /park는 전체 화면 게임(헤더와 하단 메뉴 없음). 로그인 안 한 사람이 처음 오면 /에서 /park로 보낸다
+  - 첫 화면(/)은 누구에게나 앵파크(/park). 피드는 /feed. /park는 전체 화면 게임(헤더와 하단 메뉴 없음)
   - 3D 페이지는 lazy import (three.js를 열 때만 받음)
 
 ## 규칙
@@ -28,6 +30,7 @@
 - 커밋 메시지에 Claude 세션 ID나 세션 주소 줄을 넣지 않는다.
 - 사진은 브라우저와 서버 양쪽에서 새 JPEG로 다시 저장해 위치 정보를 지운다. 이 동작을 없애지 말 것.
 - 체중 기록으로 건강 판단을 하지 않는다.
+- 서버 IP, 비밀번호는 레포에 넣지 않는다(infra/.env, git 제외).
 - 로그인 없이도 공원과 방에서 놀 수 있어야 한다(손님 앵무는 lib/guestBird.ts, 이 기기 localStorage). 깃털, 방명록, 일기처럼 남는 기록만 로그인.
 
 ## 실행

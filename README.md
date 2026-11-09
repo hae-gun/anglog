@@ -43,7 +43,7 @@ npm install
 npm run dev:mock
 ```
 
-http://localhost:5173 을 열면 앵파크부터 시작한다. 브라우저 안의 가짜 서버가 대답하고, 새로고침하면 기록이 처음으로 돌아간다.
+http://localhost:5173 을 열면 앵파크부터 시작한다(피드는 /feed). 브라우저 안의 가짜 서버가 대답하고, 새로고침하면 기록이 처음으로 돌아간다. 미리 있는 계정 haru, bori, kongi의 비밀번호는 parrot123.
 이 모드에서는 실시간 서버에 붙지 않는다(혼자 노는 앵파크).
 
 ### 전부 같이
@@ -73,6 +73,10 @@ npm run dev           # /api, /media 는 8080으로, 앵파크는 8090으로 붙
 
 프론트 빌드 때 `VITE_REALTIME_URL=wss://.../ws` 를 준다. 없으면 운영 빌드의 앵파크는 혼자 노는 모드로 뜬다.
 실시간 서버에는 `ANGPARK_ALLOWED_ORIGINS`(프론트 주소)와, 필요하면 `ANGPARK_BLOCKED_WORDS_FILE`(이름 금칙어, git에 넣지 않음)을 준다.
+
+## 운영 배포
+
+https://anglog.nobody-asked.dev . 구성, 처음 설정 순서, 배포(`anglog-deploy`), 백업은 [infra/README.md](infra/README.md).
 
 ## 다음 단계 후보
 

@@ -22,6 +22,9 @@ spring:
 
 server:
   port: ${PORT:8080}
+  # behind Nginx: take the client IP and https from X-Forwarded-For / X-Forwarded-Proto
+  # (only trusted from private network addresses, so nobody can fake it from outside)
+  forward-headers-strategy: native
   servlet:
     session:
       timeout: 30d
@@ -29,6 +32,8 @@ server:
         name: JJAK_SESSION
         http-only: true
         same-site: lax
+        # true in production (https only); false for http://localhost
+        secure: ${COOKIE_SECURE:false}
 
 management:
   endpoints:
@@ -37,8 +42,8 @@ management:
         include: health
 
 jjaklog:
-  # Development login (handle + nickname, no password). Turn off in production
-  # once Kakao login is wired up.
+  # Development login (handle + nickname, no password). Must be false in production:
+  # anyone could log in as anyone. Real accounts use /api/auth/signup and /api/auth/login.
   auth:
     dev-login-enabled: ${DEV_LOGIN_ENABLED:true}
   storage:

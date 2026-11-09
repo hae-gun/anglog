@@ -232,7 +232,7 @@ export function ParkPage() {
     setBird(null);
     if (!ctl.current?.enter(handle)) navigate(`/play/${handle}`);
   }
-  const joinHref = me ? '/parrots/new' : '/login';
+  const joinHref = me ? '/parrots/new' : '/login?mode=signup&next=/park';
 
   const followed = rooms?.filter((r) => r.following) ?? [];
   const neighbours = rooms?.filter((r) => !r.following) ?? [];
@@ -242,7 +242,7 @@ export function ParkPage() {
       <div className="park-stage" ref={stage} aria-label="앵파크. 조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 카메라가 돌아가요. 집 문을 누르면 그 집에 들어가요." />
 
       <div className="park-top">
-        <Link to="/" className="play-chip park-brand"><span aria-hidden="true">←</span> 앵로그</Link>
+        <Link to="/feed" className="play-chip park-brand"><span aria-hidden="true">←</span> 앵로그</Link>
         {status && (
           <span className={`play-chip park-online ${status}`} role="status">
             <span className="dot" aria-hidden="true" />

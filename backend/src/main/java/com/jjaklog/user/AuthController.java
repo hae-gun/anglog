@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.time.Clock;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,26 +26,70 @@ public class AuthController {
             @Size(max = 20) String nickname) {
     }
 
-    private final UserService userService;
-    private final JjaklogProperties props;
-
-    public AuthController(UserService userService, JjaklogProperties props) {
-        this.userService = userService;
-        this.props = props;
+    public record SignUpRequest(
+            @NotBlank @Size(max = 20) String handle,
+            @NotBlank @Size(max = 20) String nickname,
+            @NotBlank @Size(max = 64) String password) {
     }
 
-    /** Temporary login until Kakao login is added: handle only, no password. */
+    public record LoginRequest(
+            @NotBlank @Size(max = 40) String handle,
+            @NotBlank @Size(max = 64) String password) {
+    }
+
+    private final UserService userService;
+    private final JjaklogProperties props;
+    private final LoginThrottle throttle;
+    private final Clock clock;
+
+    public AuthController(UserService userService, JjaklogProperties props, LoginThrottle throttle, Clock clock) {
+        this.userService = userService;
+        this.props = props;
+        this.throttle = throttle;
+        this.clock = clock;
+    }
+
+    @PostMapping("/signup")
+    public UserSummary signUp(@Valid @RequestBody SignUpRequest req, HttpServletRequest request) {
+        User user = userService.signUp(req.handle(), req.nickname(), req.password());
+        startSession(request, user);
+        return UserSummary.of(user);
+    }
+
+    @PostMapping("/login")
+    public UserSummary login(@Valid @RequestBody LoginRequest req, HttpServletRequest request) {
+        String ip = request.getRemoteAddr();
+        long now = clock.millis();
+        throttle.check(ip, req.handle(), now);
+        User user;
+        try {
+            user = userService.login(req.handle(), req.password());
+        } catch (ApiException e) {
+            throttle.failed(ip, req.handle(), now);
+            throw e;
+        }
+        throttle.succeeded(ip, req.handle());
+        startSession(request, user);
+        return UserSummary.of(user);
+    }
+
+    /** A new session id on every login (no session fixation). */
+    private static void startSession(HttpServletRequest request, User user) {
+        HttpSession old = request.getSession(false);
+        if (old != null) {
+            old.invalidate();
+        }
+        request.getSession(true).setAttribute(SessionKeys.USER_ID, user.getId());
+    }
+
+    /** Development only (off in production): handle only, no password. */
     @PostMapping("/dev-login")
     public UserSummary devLogin(@Valid @RequestBody DevLoginRequest req, HttpServletRequest request) {
         if (props.auth() == null || !props.auth().devLoginEnabled()) {
             throw ApiException.forbidden("개발용 로그인이 꺼져 있어요.");
         }
         User user = userService.loginOrSignUp(req.handle(), req.nickname());
-        HttpSession old = request.getSession(false);
-        if (old != null) {
-            old.invalidate();
-        }
-        request.getSession(true).setAttribute(SessionKeys.USER_ID, user.getId());
+        startSession(request, user);
         return UserSummary.of(user);
     }
 

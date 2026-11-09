@@ -166,6 +166,9 @@ async function imageSize(blob: Blob) {
 
 // ---- the fake API --------------------------------------------------------------------------------
 
+// passwords of accounts made in this tab; the seeded neighbours all use "parrot123"
+const passwords = new Map<string, string>([['haru', 'parrot123'], ['bori', 'parrot123'], ['kongi', 'parrot123']]);
+
 export const mockApi: Api = {
   async me() { seed(); return wait(meId == null ? null : userById(meId)); },
   async devLogin(handle, nickname) {
@@ -174,6 +177,28 @@ export const mockApi: Api = {
     if (!/^[a-z0-9_]{3,20}$/.test(h)) throw new ApiError(400, 'INVALID_HANDLE', '아이디는 영어 소문자, 숫자, 밑줄로 3~20자여야 해요.');
     let u = users.find((x) => x.handle === h);
     if (!u) { u = { id: nextId(), handle: h, nickname: nickname.trim() || h }; users.push(u); }
+    meId = u.id;
+    return wait(u);
+  },
+  async signUp(handle, nickname, password) {
+    seed();
+    const h = handle.trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(h)) throw new ApiError(400, 'INVALID_HANDLE', '아이디는 영어 소문자, 숫자, 밑줄로 3~20자여야 해요.');
+    if (!nickname.trim() || nickname.trim().length > 20) throw new ApiError(400, 'INVALID_NICKNAME', '닉네임은 1~20자로 적어 주세요.');
+    if (password.length < 8 || password.length > 64) throw new ApiError(400, 'INVALID_PASSWORD', '비밀번호는 8~64자로 정해 주세요.');
+    if (password.toLowerCase() === h) throw new ApiError(400, 'INVALID_PASSWORD', '비밀번호는 아이디와 다르게 정해 주세요.');
+    if (users.some((x) => x.handle === h)) throw new ApiError(409, 'HANDLE_TAKEN', '이미 쓰는 아이디예요. 다른 아이디를 골라 주세요.');
+    const u = { id: nextId(), handle: h, nickname: nickname.trim() };
+    users.push(u);
+    passwords.set(h, password);
+    meId = u.id;
+    return wait(u);
+  },
+  async login(handle, password) {
+    seed();
+    const h = handle.trim().toLowerCase();
+    const u = users.find((x) => x.handle === h);
+    if (!u || passwords.get(h) !== password) throw new ApiError(401, 'BAD_CREDENTIALS', '아이디나 비밀번호가 맞지 않아요.');
     meId = u.id;
     return wait(u);
   },
