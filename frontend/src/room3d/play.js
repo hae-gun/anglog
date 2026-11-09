@@ -371,7 +371,7 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
     marker.material.opacity = Math.max(0, 0.8 - (clock - markerT) * 1.4);
     marker.scale.setScalar(1 + (clock - markerT) * 0.8);
     renderer.render(scene, camera);
-    actors.forEach((a) => { place(a.tagEl, a.pos, 1.4); place(a.bubbleEl, a.pos, 1.4); });
+    actors.forEach((a) => { const up = 0.3 + 1.1 * (a.b.size || 1); place(a.tagEl, a.pos, up); place(a.bubbleEl, a.pos, up); });
   }
   raf = requestAnimationFrame(frame);
 

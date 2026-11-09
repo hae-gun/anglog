@@ -1,16 +1,41 @@
-// Low-poly parrots built from spheres, with a soft toon look and a thin ink outline.
+// Low-poly parrots with a soft toon look and a thin ink outline: closer to the real birds
+// (teardrop body, folded wings with flight feathers, hooked beak, two toes forward and two back,
+// species tails and real size differences) while keeping the big head and round shiny eyes.
 // Colors come from the owner's customizer (face, head, body, wing, tail); the species sets the shape:
-//   LOVEBIRD  short and round, short fan tail, blue rump, big pale beak
-//   BUDGIE    small and slim, long pointed tail, barred head and wings, cere, purple cheeks, throat dots
-//   COCKATIEL stands upright, tall curled crest, round orange cheeks, white wing bar, very long tail
-//   QUAKER    big and sturdy, scalloped grey chest, long tail, orange-horn beak
-//   GREEN_CHEEKED_CONURE  dark cap, bare white eye rings, scalloped chest, long dark-red tail
+//   LOVEBIRD  15 cm. short and round, short rounded tail, blue rump, big pale beak
+//   BUDGIE    18 cm, the lightest. slim, two long pointed tail feathers, barred head and wings,
+//             cere, purple cheek patches, throat spots, small beak half hidden in feathers
+//   COCKATIEL 31 cm. stands upright, tall curving crest, orange cheeks, white wing patch, very long tail
+//   QUAKER    29 cm, the heaviest. sturdy, grey scalloped forehead and chest, blue flight feathers, horn beak
+//   GREEN_CHEEKED_CONURE  26 cm. dark cap, bare white eye rings, scalloped chest, maroon belly and tail,
+//             blue flight feathers, dark beak
 import * as THREE from 'three';
+import { BufferGeometryUtils } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
-const SPH = new THREE.SphereGeometry(1, 22, 16);
+const SPH = new THREE.SphereGeometry(1, 20, 14);
 const SPH_LO = new THREE.SphereGeometry(1, 10, 8);
 const toLinear = (hex) => new THREE.Color(hex).convertSRGBToLinear();
+
+/** A sphere pulled to a point along +x (a feather); bend curls the tip along -y. */
+function taper(tip, bend = 0, seg = [12, 8]) {
+  const g = new THREE.SphereGeometry(1, seg[0], seg[1]);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    if (x <= 0) continue;
+    const f = 1 - tip * Math.pow(x, 1.4);
+    p.setY(i, p.getY(i) * f - bend * x * x);
+    p.setZ(i, p.getZ(i) * f);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+const FEATHER = taper(0.9);
+// crest feather: the tip curls forward
+const CREST = taper(0.85, 0.35);
+// upper beak: round at the base, narrowing and curling down into a hook
+const BEAK = taper(0.82, 0.95, [16, 12]);
 
 const toonGrad = (() => {
   const t = new THREE.DataTexture(new Uint8Array([110, 185, 255]), 3, 1, THREE.LuminanceFormat);
@@ -26,6 +51,7 @@ export function toon(hex) {
   return MATS.get(hex);
 }
 const lineMat = new THREE.MeshBasicMaterial({ color: toLinear('#2B2622'), side: THREE.BackSide });
+const shineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
 function shade(hex, f) {
   return '#' + new THREE.Color(hex).multiplyScalar(f).getHexString();
@@ -33,6 +59,11 @@ function shade(hex, f) {
 function lighten(hex, k) {
   const c = new THREE.Color(hex);
   c.lerp(new THREE.Color('#FFFFFF'), k);
+  return '#' + c.getHexString();
+}
+function mix(a, b, k) {
+  const c = new THREE.Color(a);
+  c.lerp(new THREE.Color(b), k);
   return '#' + c.getHexString();
 }
 
@@ -53,15 +84,35 @@ function blob(parent, hex, x, y, z, sx, sy, sz, rz, line, geo = SPH) {
   return m;
 }
 
-/** Body shape per species. tilt lifts the chest (upright birds), tail = [length, width, feathers]. */
-const SHAPES = {
-  LOVEBIRD: { scale: 0.95, body: [0.48, 0.43, 0.41], tilt: 0.15, tail: [0.75, 1.15, 3], head: [0.28, 0.78], headR: 1.02, beak: ['#F1DCC0', 1.2] },
-  BUDGIE: { scale: 0.8, body: [0.4, 0.4, 0.33], tilt: 0.38, tail: [1.75, 0.75, 2], head: [0.25, 0.82], headR: 0.92, beak: ['#E9D9A8', 0.75] },
-  COCKATIEL: { scale: 1.05, body: [0.42, 0.44, 0.36], tilt: 0.62, tail: [2.1, 0.8, 2], head: [0.2, 0.9], headR: 0.95, beak: ['#9A9894', 0.8] },
-  QUAKER: { scale: 1.08, body: [0.5, 0.46, 0.42], tilt: 0.32, tail: [1.45, 0.95, 3], head: [0.27, 0.84], headR: 1.05, beak: ['#F0B880', 1.2] },
-  GREEN_CHEEKED_CONURE: { scale: 0.95, body: [0.44, 0.43, 0.37], tilt: 0.36, tail: [1.65, 0.85, 3], head: [0.26, 0.83], headR: 0.98, beak: ['#46413D', 1.0] },
-  OTHER: { scale: 1, body: [0.47, 0.42, 0.4], tilt: 0.3, tail: [1, 1, 3], head: [0.28, 0.78], headR: 1, beak: ['#F3E3C8', 1] },
-};
+const tmpV = new THREE.Vector3();
+// folded wings lie along the back
+const WZ = -0.06;
+// body center height: a little leg shows under the belly
+const TY = 0.53;
+const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1);
+const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qc = new THREE.Quaternion(), qd = new THREE.Quaternion();
+/**
+ * One feather from a root point, pointing backwards: droop tips it down, yaw fans it sideways.
+ * len is the full length; width across the vane, thick the thin side.
+ * flat = the vane lies level like a tail feather; otherwise it stands upright (flight and crest feathers).
+ */
+function feather(parent, hex, [x, y, z], len, width, thick, droop, yaw, line, flat = true, geo = FEATHER) {
+  const m = new THREE.Mesh(geo, toon(hex));
+  m.rotation.set(0, yaw, Math.PI + droop);
+  m.scale.set(len / 2, flat ? thick : width, flat ? width : thick);
+  tmpV.set(len / 2, 0, 0).applyEuler(m.rotation);
+  m.position.set(x + tmpV.x, y + tmpV.y, z + tmpV.z);
+  m.castShadow = true;
+  parent.add(m);
+  if (line) {
+    const o = new THREE.Mesh(geo, lineMat);
+    o.position.copy(m.position);
+    o.rotation.copy(m.rotation);
+    o.scale.set(len / 2 + line, m.scale.y + line, m.scale.z + line);
+    parent.add(o);
+  }
+  return m;
+}
 
 /** Little crescent marks on a surface: barring, scallops. */
 function marks(parent, hex, list, size) {
@@ -69,60 +120,151 @@ function marks(parent, hex, list, size) {
 }
 
 /**
- * Builds a bird. Returns { group, pose(mood, t) }.
+ * Body shape per species.
+ * size: overall size from the real birds (lovebird about 0.9). tilt lifts the chest (upright birds).
+ * tail: feather lengths from the middle outwards; pair = two middle feathers instead of one.
+ */
+const SHAPES = {
+  LOVEBIRD: {
+    size: 0.9, body: [0.47, 0.39, 0.39], tilt: 0.55, head: [0.33, 0.9], headR: 1.02, beak: ['#F1DCC0', 1.2],
+    tail: { lens: [0.36, 0.35, 0.33], pair: false, w: 0.05, fan: 0.22, down: 0.3 }, wing: 1,
+  },
+  BUDGIE: {
+    size: 0.8, body: [0.44, 0.34, 0.31], tilt: 0.7, head: [0.3, 0.95], headR: 0.92, beak: ['#E9D9A8', 0.72],
+    tail: { lens: [1.05, 0.66, 0.5], pair: true, w: 0.025, fan: 0.1, down: 0.42 }, wing: 1.1,
+  },
+  COCKATIEL: {
+    size: 1.2, body: [0.46, 0.35, 0.33], tilt: 0.88, head: [0.24, 1.07], headR: 0.9, beak: ['#9A9894', 0.8],
+    tail: { lens: [1.25, 1.0, 0.78], pair: true, w: 0.03, fan: 0.1, down: 0.5 }, wing: 1.2,
+  },
+  QUAKER: {
+    size: 1.25, body: [0.5, 0.42, 0.41], tilt: 0.6, head: [0.35, 0.96], headR: 1.0, beak: ['#F0B880', 1.25],
+    tail: { lens: [0.86, 0.78, 0.68], pair: false, w: 0.045, fan: 0.14, down: 0.4 }, wing: 1.1, flight: '#3D6FB8',
+  },
+  GREEN_CHEEKED_CONURE: {
+    size: 1.1, body: [0.47, 0.38, 0.36], tilt: 0.64, head: [0.33, 0.96], headR: 0.96, beak: ['#46413D', 1.0],
+    tail: { lens: [1.0, 0.9, 0.78], pair: false, w: 0.04, fan: 0.13, down: 0.42 }, wing: 1.12, flight: '#3B66B0',
+  },
+  OTHER: {
+    size: 1, body: [0.47, 0.4, 0.39], tilt: 0.55, head: [0.33, 0.9], headR: 1, beak: ['#F3E3C8', 1],
+    tail: { lens: [0.55, 0.5, 0.45], pair: false, w: 0.045, fan: 0.16, down: 0.35 }, wing: 1,
+  },
+};
+
+/**
+ * Merges the plain meshes under each group by material, so one bird is a few dozen draw calls
+ * instead of a hundred (the park can hold fifty birds). Groups that move (head, wings, beak, eyes,
+ * crest) stay separate.
+ */
+function compact(obj) {
+  obj.children.slice().forEach((ch) => { if (!ch.isMesh) compact(ch); });
+  const byMat = new Map();
+  obj.children.forEach((ch) => {
+    if (!ch.isMesh) return;
+    if (!byMat.has(ch.material)) byMat.set(ch.material, []);
+    byMat.get(ch.material).push(ch);
+  });
+  byMat.forEach((list, mat) => {
+    if (list.length < 2) return;
+    const geos = list.map((m) => {
+      m.updateMatrix();
+      return m.geometry.clone().applyMatrix4(m.matrix);
+    });
+    const merged = BufferGeometryUtils.mergeBufferGeometries(geos);
+    geos.forEach((g) => g.dispose());
+    if (!merged) return;
+    const one = new THREE.Mesh(merged, mat);
+    one.castShadow = mat !== lineMat;
+    list.forEach((m) => obj.remove(m));
+    obj.add(one);
+  });
+}
+
+/**
+ * Builds a bird. Returns { group, pose(mood, t), size }.
+ * group is for the caller to place, turn and scale (1 = normal); the species size sits inside it.
  */
 export function makeBird(colors, species) {
   const c = colors;
   const S = SHAPES[species] || SHAPES.OTHER;
   const wingC = c.wing;
-  const tipC = shade(wingC, 0.7);
+  const midC = shade(wingC, 0.82);
+  const flightC = S.flight ? mix(shade(wingC, 0.75), S.flight, 0.7) : shade(wingC, 0.68);
   const bellyC = lighten(c.body, 0.3);
   const LW = 0.022;
   const group = new THREE.Group();
+  const sized = new THREE.Group();
+  sized.scale.setScalar(S.size);
+  group.add(sized);
   const inner = new THREE.Group();
-  group.add(inner);
+  sized.add(inner);
 
   // the torso turns around the middle of the body, so upright species lift the chest and drop the tail
   const torso = new THREE.Group();
-  torso.position.set(-0.04, 0.47, 0);
+  torso.position.set(-0.04, TY, 0);
   torso.rotation.z = S.tilt;
   inner.add(torso);
   const [bx, by, bz] = S.body;
-  blob(torso, c.body, 0, 0, 0, bx, by, bz, 0.3 - S.tilt * 0.5, LW);
+  blob(torso, c.body, 0, 0, 0, bx, by, bz, 0.06, LW);
+  // the body narrows towards the tail (a teardrop, not a ball)
+  blob(torso, c.body, -bx * 0.62, -by * 0.12, 0, bx * 0.6, by * 0.58, bz * 0.72, 0.12, LW);
   const chest = blob(torso, bellyC, 0.15, -0.07, 0, bx * 0.74, by * 0.76, bz * 0.85, 0.2);
-  if (species === 'LOVEBIRD' || species === 'OTHER') blob(torso, '#4A8FD1', -0.36, -0.04, 0, 0.19, 0.17, 0.2);
+  if (species === 'GREEN_CHEEKED_CONURE') blob(torso, '#8E3B34', -bx * 0.1, -by * 0.62, 0, bx * 0.45, by * 0.4, bz * 0.7, 0.1);
+  if (species === 'LOVEBIRD' || species === 'OTHER') blob(torso, '#4A8FD1', -bx * 0.86, by * 0.12, 0, 0.17, 0.12, 0.17, 0.3);
 
-  // tail
-  const [tl, tw, tn] = S.tail;
-  const tails = tn === 2 ? [-0.035, 0.035] : [-0.07, 0, 0.07];
-  tails.forEach((z, i) => {
-    const len = 0.25 * tl * (tn === 3 && i !== 1 ? 0.88 : 1);
-    blob(torso, c.tail, -0.55 - len * 0.7, -0.16 - Math.abs(z) * 0.4, z * 1.4 * tw, len, 0.06 * tw, 0.055 * tw, 0.32 + S.tilt * 0.25 + (i - (tails.length - 1) / 2) * 0.05, LW * 0.6);
+  // tail: feathers fanned from the root, middle ones longest
+  const T = S.tail;
+  const root = [-bx * 0.98, -by * 0.2, 0];
+  // the tail hangs at its own angle, but never into the ground: lift it if the longest feather would touch
+  const rootY = TY + root[0] * Math.sin(S.tilt) + root[1] * Math.cos(S.tilt);
+  const longest = 0.6 * T.lens[0];
+  const down = Math.min(T.down, Math.asin(Math.max(-1, Math.min(1, (rootY - 0.03) / longest))));
+  const droop = down - S.tilt;
+  T.lens.forEach((L, k) => {
+    const len = 0.6 * L;
+    const col = k === 0 ? c.tail : shade(c.tail, 1 - k * 0.07);
+    if (!T.pair && k === 0) {
+      feather(torso, col, root, len, 0.075, 0.022, droop, 0, LW * 0.6);
+      return;
+    }
+    const off = T.pair ? k + 0.5 : k;
+    [-1, 1].forEach((s) => {
+      feather(torso, col, [root[0], root[1] + 0.008 * k, root[2] + s * off * T.w], len, 0.07, 0.02, droop + 0.03 * k, -s * off * T.fan, LW * 0.6);
+    });
   });
+  // undertail coverts
+  blob(torso, shade(c.body, 0.9), root[0] + 0.05, root[1] - 0.04, 0, 0.13, 0.07, 0.1, 0.4);
 
+  // folded wings: coverts, a band of secondaries, and long flight feathers crossing over the tail
   const wingBase = [];
   const wings = [-1, 1].map((s) => {
     const w = new THREE.Group();
-    w.position.set(-0.06, 0.03, (bz - 0.07) * s);
-    w.rotation.z = 0.35;
+    w.position.set(0.04, 0.06, (bz - 0.06) * s);
+    w.rotation.z = WZ;
     torso.add(w);
     wingBase.push(w.position.y);
-    blob(w, wingC, 0, 0, 0, 0.36, 0.22, 0.09, 0, LW);
-    blob(w, tipC, -0.24, -0.05, 0.012 * s, 0.24, 0.12, 0.07);
+    const wl = S.wing;
+    // flight feathers first, so the coverts lie over their roots
+    [0, 1, 2].forEach((i) => {
+      feather(w, i === 0 ? flightC : shade(flightC, 1 - i * 0.07), [-0.22 * wl, -0.07 + i * 0.03, (0.01 - i * 0.008) * s],
+        (0.56 - i * 0.07) * wl, 0.085, 0.022, -0.04 + i * 0.06, 0, LW * 0.5, false);
+    });
+    blob(w, wingC, -0.08, -0.01, 0, 0.28 * wl, 0.19, 0.085, -0.04, LW);
+    blob(w, midC, -0.22 * wl, -0.07, 0.01 * s, 0.17 * wl, 0.1, 0.075, -0.06);
+    blob(w, lighten(wingC, 0.12), 0.04, 0.05, 0.02 * s, 0.14, 0.1, 0.072, 0.1);
     if (species === 'BUDGIE') {
       // black scallops on the wing
-      marks(w, '#1E1E1E', [[0.16, 0.08, 0.08 * s], [0.05, 0.1, 0.085 * s], [-0.06, 0.08, 0.085 * s], [0.1, -0.02, 0.088 * s], [-0.01, -0.01, 0.09 * s], [-0.12, -0.03, 0.085 * s]], [0.05, 0.022, 0.018]);
+      marks(w, '#1E1E1E', [[0.04, 0.1, 0.075 * s], [-0.08, 0.11, 0.08 * s], [-0.2, 0.08, 0.075 * s], [-0.02, 0.0, 0.085 * s], [-0.14, 0.01, 0.085 * s], [-0.26, -0.02, 0.07 * s]], [0.055, 0.022, 0.018]);
     }
-    if (species === 'COCKATIEL') blob(w, lighten(wingC, 0.75), 0.08, 0.02, 0.06 * s, 0.2, 0.08, 0.04, -0.15);
-    if (species === 'QUAKER' || species === 'GREEN_CHEEKED_CONURE') blob(w, shade(wingC, 0.8), 0.12, 0.08, 0.05 * s, 0.14, 0.09, 0.05);
+    if (species === 'COCKATIEL') blob(w, lighten(wingC, 0.62), -0.12, -0.05, 0.05 * s, 0.24, 0.06, 0.045, -0.04);
     return w;
   });
 
   // scalloped chests: crescents placed on the surface of the chest ellipsoid
   if (species === 'QUAKER' || species === 'GREEN_CHEEKED_CONURE') {
-    const chestC = species === 'QUAKER' ? (c.face || '#C9CFC4') : lighten(c.body, 0.2);
+    const chestC = species === 'QUAKER' ? (c.face || '#C9CFC4') : mix(c.body, '#8C8A6E', 0.45);
     chest.material = toon(chestC);
-    const markC = species === 'QUAKER' ? shade(chestC, 0.62) : shade(c.body, 0.5);
+    const markC = species === 'QUAKER' ? shade(chestC, 0.62) : shade(chestC, 0.55);
     const cx = 0.15, cy = -0.07, rx = bx * 0.74, ry = by * 0.76, rz = bz * 0.85;
     const rows = [];
     for (let r = 0; r < 4; r++) {
@@ -136,15 +278,22 @@ export function makeBird(colors, species) {
     marks(torso, markC, rows, [0.016, 0.02, 0.06]);
   }
 
-  const FOOT = species === 'COCKATIEL' || species === 'QUAKER' ? '#9C8F8A' : '#C9A9A0';
+  // feet: short feathered legs, two toes forward and two back, gripping
+  const FOOT = species === 'COCKATIEL' || species === 'QUAKER' || species === 'GREEN_CHEEKED_CONURE' ? '#8F8783' : '#C9A9A0';
   [-1, 1].forEach((s) => {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.14, 6), toon(FOOT));
-    leg.position.set(0.06, 0.07, 0.11 * s);
-    inner.add(leg);
+    blob(inner, shade(c.body, 0.95), 0.03, 0.2, 0.12 * s, 0.1, 0.1, 0.08);
+    blob(inner, FOOT, 0.05, 0.08, 0.12 * s, 0.032, 0.08, 0.032, 0, 0, SPH_LO);
+    [[0.07, 0.12], [0.07, -0.18], [-0.06, 0.25], [-0.06, -0.12]].forEach(([dx, a]) => {
+      const t = blob(inner, FOOT, 0.05 + dx, 0.02, 0.12 * s + a * 0.12, 0.07, 0.022, 0.024, 0, 0, SPH_LO);
+      t.rotation.y = -a * Math.sign(dx);
+    });
   });
 
-  // head
+  // a soft neck, so the head sits on the body instead of floating on it
   const [hx, hy] = S.head;
+  blob(inner, c.body, hx - 0.1, hy - 0.2, 0, 0.24, 0.2, 0.25, 0.3);
+
+  // head
   const head = new THREE.Group();
   head.position.set(hx, hy, 0);
   head.scale.setScalar(S.headR);
@@ -154,6 +303,10 @@ export function makeBird(colors, species) {
   if (species === 'GREEN_CHEEKED_CONURE') {
     // a dark cap over the crown and the back of the head
     blob(head, c.head, -0.02, 0.2, 0, 0.32, 0.26, 0.335, 0.2);
+  } else if (species === 'QUAKER') {
+    // the grey runs from the forehead down the throat
+    blob(head, c.head, 0.16, 0.2, 0, 0.22, 0.17, 0.26);
+    blob(head, c.face, 0.17, -0.17, 0, 0.2, 0.14, 0.22);
   } else {
     blob(head, c.head, 0.18, 0.24, 0, 0.2, 0.15, 0.24);
   }
@@ -161,42 +314,53 @@ export function makeBird(colors, species) {
   if (species === 'COCKATIEL') {
     [-1, 1].forEach((s) => blob(head, '#F07C3E', 0.2, -0.02, 0.27 * s, 0.12, 0.11, 0.035));
     const crest = new THREE.Group();
-    crest.position.set(0.1, 0.36, 0);
+    crest.position.set(0.1, 0.3, 0);
     head.add(crest);
-    [0, 1, 2, 3].forEach((i) => {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.5 - i * 0.08, 8), toon(i === 0 ? c.head : shade(c.head, 0.92)));
-      f.geometry.translate(0, (0.5 - i * 0.08) / 2, 0);
-      f.position.set(-0.05 * i, 0, 0);
-      f.rotation.z = 0.25 + i * 0.16;
-      crest.add(f);
+    // long thin crest feathers, sweeping up and back with the tips curling forward
+    [0, 1, 2, 3, 4].forEach((i) => {
+      const len = 0.62 - i * 0.07;
+      feather(crest, i < 2 ? c.head : shade(c.head, 0.93), [-0.05 * i, 0, (i % 2 ? 0.025 : -0.025)], len, 0.06, 0.03,
+        -(1.27 - i * 0.15), 0, LW * 0.5, false, CREST);
     });
     head.userData.crest = crest;
   } else if (species === 'BUDGIE') {
     [-1, 1].forEach((s) => blob(head, '#6E5DB8', 0.24, -0.1, 0.25 * s, 0.06, 0.05, 0.03));
     // throat spots
     marks(head, '#1E1E1E', [[0.3, -0.17, 0.07], [0.3, -0.17, -0.07], [0.27, -0.2, 0.17], [0.27, -0.2, -0.17]], [0.028, 0.028, 0.028]);
-    // barring on the back of the head
-    marks(head, '#1E1E1E', [[-0.24, 0.3, 0, 0.6], [-0.3, 0.2, 0, 0.9], [-0.33, 0.08, 0, 1.2], [-0.12, 0.38, 0, 0.3]], [0.02, 0.01, 0.2]);
+    // fine barring from the crown down the back of the head
+    marks(head, '#1E1E1E', [[-0.24, 0.3, 0, 0.6], [-0.3, 0.2, 0, 0.9], [-0.33, 0.08, 0, 1.2], [-0.12, 0.38, 0, 0.3], [-0.02, 0.43, 0, 0.1],
+      [-0.2, 0.28, 0.2, 0.7], [-0.2, 0.28, -0.2, 0.7], [-0.27, 0.15, 0.2, 1.0], [-0.27, 0.15, -0.2, 1.0]], [0.02, 0.01, 0.16]);
     // cere over the beak
-    blob(head, '#6F8FD8', 0.37, 0.12, 0, 0.06, 0.04, 0.07);
+    blob(head, '#6F8FD8', 0.36, 0.12, 0, 0.06, 0.04, 0.075);
   } else if (species === 'LOVEBIRD' || species === 'OTHER') {
     [-1, 1].forEach((s) => blob(head, '#FF9C9C', 0.2, -0.02, 0.27 * s, 0.075, 0.045, 0.03));
   }
 
+  // hooked beak: the upper half curls down over a small lower half
   const [beakC, beakK] = S.beak;
-  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.12 * beakK, 0.2 * Math.sqrt(beakK), 14), toon(beakC));
-  beak.position.set(0.39 + 0.02 * beakK, 0.02, 0);
-  beak.rotation.z = -Math.PI / 2 - 0.55;
+  const beak = new THREE.Group();
+  beak.position.set(0.35 + 0.02 * beakK, 0.04, 0);
   head.add(beak);
+  blob(beak, shade(beakC, 0.86), 0.03, -0.075 * beakK, 0, 0.07 * beakK, 0.05 * beakK, 0.065 * beakK, -0.3, LW * 0.7, SPH_LO);
+  blob(beak, beakC, 0.02, 0, 0, 0.13 * beakK, 0.1 * beakK, 0.09 * beakK, -0.35, LW * 0.7, BEAK);
+  if (species === 'BUDGIE') {
+    // budgies' beaks sit half inside the face feathers
+    blob(head, c.face, 0.26, -0.02, 0, 0.12, 0.13, 0.15);
+  }
+
   const eyes = [-1, 1].map((s) => {
     const eg = new THREE.Group();
     eg.position.set(0.24, 0.12, 0.27 * s);
     head.add(eg);
     blob(eg, '#1B1B1B', 0, 0, 0, 0.07, 0.078, 0.05);
-    const hl = new THREE.Mesh(SPH, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    const hl = new THREE.Mesh(SPH_LO, shineMat);
     hl.position.set(0.028, 0.032, 0.035 * s);
     hl.scale.setScalar(0.024);
     eg.add(hl);
+    const hl2 = new THREE.Mesh(SPH_LO, shineMat);
+    hl2.position.set(-0.02, -0.03, 0.04 * s);
+    hl2.scale.setScalar(0.011);
+    eg.add(hl2);
     if (species === 'GREEN_CHEEKED_CONURE') {
       // bare white skin around the eye, outside the blinking group
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.028, 6, 16), toon('#F4F1EA'));
@@ -206,8 +370,20 @@ export function makeBird(colors, species) {
     return eg;
   });
 
-  group.scale.setScalar(S.scale);
+  compact(group);
   const phase = Math.random() * 10;
+
+  /** Opens the wings out sideways (rolling them flat as they open) and beats them up and down. */
+  function wingPose(spread, flap) {
+    wings.forEach((w, i) => {
+      const s = i ? 1 : -1;
+      qa.setFromAxisAngle(AX, -s * flap);
+      qb.setFromAxisAngle(AY, s * spread);
+      qc.setFromAxisAngle(AX, -s * (Math.PI / 2) * Math.min(1, spread / 1.2));
+      qd.setFromAxisAngle(AZ, WZ);
+      w.quaternion.copy(qa).multiply(qb).multiply(qc).multiply(qd);
+    });
+  }
 
   /** Pose for a mood or an action. t = seconds. */
   function pose(mood, t) {
@@ -218,7 +394,7 @@ export function makeBird(colors, species) {
     head.position.set(hx, hy, 0);
     head.rotation.set(0, 0, 0);
     beak.scale.set(1, 1, 1);
-    wings.forEach((w, i) => { w.rotation.set(0, 0, 0.35); w.position.y = wingBase[i]; });
+    wings.forEach((w, i) => { w.rotation.set(0, 0, WZ); w.position.y = wingBase[i]; });
     let eyeY = tt % 4.2 < 0.13 ? 0.15 : 1;
     if (head.userData.crest) head.userData.crest.rotation.z = 0;
     switch (mood) {
@@ -228,8 +404,10 @@ export function makeBird(colors, species) {
         head.rotation.z = Math.sin(tt * 13) * 0.06;
         break;
       case 'FLY': {
+        // wings open out sideways and beat
         const f = Math.sin(tt * 26);
-        wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * (0.7 + f * 0.7); w.position.y = wingBase[i] + 0.12; });
+        wingPose(1.25, 0.15 + f * 0.75);
+        wings.forEach((w, i) => { w.position.y = wingBase[i] + 0.06; });
         inner.rotation.z = 0.12 - S.tilt * 0.4;
         if (head.userData.crest) head.userData.crest.rotation.z = 0.5;
         break;
@@ -239,7 +417,7 @@ export function makeBird(colors, species) {
         inner.position.y = Math.abs(k) * 0.22;
         inner.rotation.y = Math.sin(tt * 4.5) * 0.5;
         head.rotation.z = 0.2 + k * 0.2;
-        wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * Math.max(0, k) * 0.9; });
+        wingPose(Math.max(0, k) * 0.9, Math.max(0, k) * 0.6);
         if (head.userData.crest) head.userData.crest.rotation.z = -0.5;
         break;
       }
@@ -255,8 +433,8 @@ export function makeBird(colors, species) {
         break;
       case 'CHIRP': {
         head.rotation.z = 0.45 + Math.sin(tt * 22) * 0.06;
-        beak.scale.set(1, 1.35, 1.35);
-        wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * 0.3; });
+        beak.scale.set(1, 1.3, 1.2);
+        wingPose(0.35, 0.2);
         if (head.userData.crest) head.userData.crest.rotation.z = -0.45;
         break;
       }
@@ -267,12 +445,14 @@ export function makeBird(colors, species) {
         eyeY = 0.12;
         if (head.userData.crest) head.userData.crest.rotation.z = 0.6;
         break;
-      case 'HAPPY':
+      case 'HAPPY': {
+        const k = Math.max(0, Math.sin(tt * 5));
         inner.position.y = Math.abs(Math.sin(tt * 5)) * 0.12;
         head.rotation.z = 0.15;
-        wings.forEach((w, i) => { w.rotation.x = (i ? 1 : -1) * Math.max(0, Math.sin(tt * 5)) * 0.5; });
+        wingPose(k * 0.6, k * 0.35);
         if (head.userData.crest) head.userData.crest.rotation.z = -0.4;
         break;
+      }
       case 'PLAYFUL':
         head.rotation.y = Math.sin(tt * 3) * 0.6;
         head.rotation.z = Math.sin(tt * 6) * 0.15;
@@ -298,7 +478,7 @@ export function makeBird(colors, species) {
     eyes.forEach((e) => e.scale.set(1, eyeY, 1));
   }
 
-  return { group, pose };
+  return { group, pose, size: S.size };
 }
 
 export { UP, shade, toLinear };

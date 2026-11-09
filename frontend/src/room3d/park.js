@@ -1103,7 +1103,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     if (view === 'first') {
       const k = snap ? 1 : 1 - Math.exp(-dt * 12);
       cam.yaw = lerpAngle(cam.yaw, cam.yawT, k);
-      const s = player.b.group.scale.x || 1;
+      const s = (player.b.group.scale.x || 1) * (player.b.size || 1);
       const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
       camera.position.set(player.pos.x + fx * 0.3 * s, player.pos.y + 0.95 * s, player.pos.z + fz * 0.3 * s);
       look.copy(camera.position);
@@ -1573,8 +1573,10 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       const show = (a.isPlayer || a.pos.distanceTo(player.pos) < 7 || a.bubbleUntil > clock) && a.b.group.visible;
       if (a.isPlayer && view === 'first') { a.tagEl.hidden = true; a.bubbleEl.hidden = true; return; }
       a.tagEl.hidden = !show || a.scale < 0.5;
-      if (show) place(a.tagEl, a.pos, 1.4, 40);
-      if (!a.bubbleEl.hidden) place(a.bubbleEl, a.pos, 1.4, 40);
+      // name tags sit above the bird, so big species carry them higher
+      const above = 0.3 + 1.1 * (a.b.size || 1);
+      if (show) place(a.tagEl, a.pos, above, 40);
+      if (!a.bubbleEl.hidden) place(a.bubbleEl, a.pos, above, 40);
     });
   }
   raf = requestAnimationFrame(frame);
