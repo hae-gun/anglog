@@ -76,7 +76,7 @@ npm run dev           # /api, /media 는 8080으로, 앵파크는 8090으로 붙
 
 ## 운영 배포
 
-https://anglog.nobody-asked.dev . 구성, 처음 설정 순서, 배포(`anglog-deploy`), 백업은 [infra/README.md](infra/README.md).
+화면은 https://anglog.nobody-asked.dev (GitHub Pages, main에 `frontend/`가 바뀌면 Actions가 배포), API와 앵파크 실시간은 서버의 https://api.anglog.nobody-asked.dev . 구성, 처음 설정 순서, 서버 배포(`anglog-deploy`), 백업은 [infra/README.md](infra/README.md).
 
 ## 다음 단계 후보
 

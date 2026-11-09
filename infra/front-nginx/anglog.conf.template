@@ -1,6 +1,7 @@
 # 앵로그 (github.com/hae-gun/anglog) 앞단. 고해야지 infra/app/nginx/ 에 함께 두는 파일이고,
 # 원본은 anglog 저장소 infra/front-nginx/anglog.conf.template.
-# ${ANGLOG_DOMAIN} 은 컨테이너 시작 때 infra/app/.env 값으로 바뀐다.
+# ${ANGLOG_DOMAIN} 은 컨테이너 시작 때 infra/app/.env 값으로 바뀐다 (api.anglog.nobody-asked.dev).
+# 화면은 GitHub Pages(anglog.nobody-asked.dev)에 있고, 여기로는 API, 사진, 앵파크 실시간만 온다.
 #
 # 앵로그 쪽은 anglog-edge 네트워크의 anglog-web 컨테이너 하나로 모두 넘긴다 (안쪽 프록시는 앵로그가 한다).
 # anglog-web이 내려가 있어도 이 Nginx는 떠야 하므로, 주소를 시작할 때가 아니라 요청 때마다 찾는다.
@@ -46,7 +47,7 @@ server {
   }
 
   location / {
-    # 화면 파일과 사진이 한꺼번에 오므로 넉넉히
+    # 피드를 열면 사진이 한꺼번에 오므로 넉넉히
     limit_req zone=reqs burst=80 nodelay;
 
     proxy_pass $anglog;

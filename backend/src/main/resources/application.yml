@@ -49,5 +49,9 @@ jjaklog:
   storage:
     # Where uploaded photos are written. Served back under /media/**.
     dir: ${STORAGE_DIR:./storage}
+  # Origins (comma separated) allowed to call /api with cookies. Empty in development (Vite proxy,
+  # same origin); in production the GitHub Pages address of the screen.
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   # Day boundaries (streaks, one feather per day) follow Korea time.
   zone: Asia/Seoul

@@ -1,21 +1,39 @@
 import { Api, ApiError, Comment, FeedTab, GuestbookEntry, NewPost, Page, Parrot, ParrotInput, Post, Room, RoomCard, UserSummary } from './types';
 
+// Where the API lives. Empty: the same origin (Vite proxy in development).
+// On GitHub Pages: https://api.anglog.nobody-asked.dev (set by the Pages workflow at build time).
+const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) ?? '').replace(/\/$/, '');
+
+/** Photo paths come back as /media/...; on another origin they need the API address in front. */
+function absolutize(v: unknown): unknown {
+  if (!API_BASE) return v;
+  if (typeof v === 'string') return v.startsWith('/media/') ? API_BASE + v : v;
+  if (Array.isArray(v)) return v.map(absolutize);
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) out[k] = absolutize(x);
+    return out;
+  }
+  return v;
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const init: RequestInit = { method, credentials: 'same-origin', headers: {} };
+  // the session cookie belongs to the API host, so it must be sent along on cross-origin calls
+  const init: RequestInit = { method, credentials: API_BASE ? 'include' : 'same-origin', headers: {} };
   if (body instanceof FormData) {
     init.body = body;
   } else if (body !== undefined) {
     (init.headers as Record<string, string>)['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
   }
-  const res = await fetch(url, init);
+  const res = await fetch(API_BASE + url, init);
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;
   if (!res.ok) {
     throw new ApiError(res.status, data?.code ?? 'ERROR', data?.message ?? '요청을 처리하지 못했어요.');
   }
-  return data as T;
+  return absolutize(data) as T;
 }
 
 const q = (params: Record<string, string | number | null | undefined>) => {

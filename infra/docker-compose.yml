@@ -1,4 +1,5 @@
-# 앵로그 운영 스택: PostgreSQL, 앵로그 API, 앵파크 실시간 서버, 웹(빌드한 화면 + 안쪽 프록시)
+# 앵로그 운영 스택: PostgreSQL, 앵로그 API, 앵파크 실시간 서버, 안쪽 프록시(web)
+# 화면은 여기 없다. GitHub Pages(${DOMAIN})가 내보내고, 이 스택은 ${API_DOMAIN}에서 API와 실시간만 맡는다.
 #
 # TLS는 이 스택 밖의 앞단 Nginx(지금은 고해야지 app 서버의 Nginx)가 맡고,
 # 그 Nginx는 anglog-edge 네트워크로 web 컨테이너 하나에만 붙는다. db, api, realtime은 밖에서 보이지 않는다.
@@ -36,6 +37,8 @@ services:
       DEV_LOGIN_ENABLED: "false"
       COOKIE_SECURE: "true"
       STORAGE_DIR: /data/media
+      # 화면(GitHub Pages)에서 쿠키를 달고 부를 수 있는 곳은 이 주소 하나
+      CORS_ALLOWED_ORIGINS: https://${DOMAIN:?infra/.env에 DOMAIN을 넣으세요}
     volumes:
       - media:/data/media
     # 힙은 이 값의 75% (Dockerfile)
@@ -48,7 +51,7 @@ services:
   realtime:
     build: ../realtime
     environment:
-      ANGPARK_ALLOWED_ORIGINS: https://${DOMAIN:?infra/.env에 DOMAIN을 넣으세요}
+      ANGPARK_ALLOWED_ORIGINS: https://${DOMAIN}
       # 이름 금칙어 목록(한 줄에 하나). 없으면 거르지 않는다. 파일은 git에 넣지 않는다
       ANGPARK_BLOCKED_WORDS_FILE: /data/blocked-words.txt
     volumes:
@@ -56,16 +59,16 @@ services:
     mem_limit: 384m
     restart: unless-stopped
 
+  # /api, /media → api, /ws → realtime 으로 나누는 프록시. 설정은 infra/web.conf
   web:
-    build:
-      context: ../frontend
-      args:
-        VITE_REALTIME_URL: wss://${DOMAIN}/ws
+    image: nginx:1.27-alpine
+    volumes:
+      - ./web.conf:/etc/nginx/conf.d/default.conf:ro,z
     networks:
       default: {}
       edge:
         aliases: [anglog-web]
-    mem_limit: 64m
+    mem_limit: 32m
     depends_on: [api, realtime]
     restart: unless-stopped
 

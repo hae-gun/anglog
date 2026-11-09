@@ -1,7 +1,9 @@
 package com.jjaklog;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,7 +17,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** Password accounts, and the development login switched off as in production. */
-@SpringBootTest(properties = "jjaklog.auth.dev-login-enabled=false")
+@SpringBootTest(properties = {
+        "jjaklog.auth.dev-login-enabled=false",
+        "jjaklog.cors.allowed-origins=https://anglog.example"})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AuthFlowTest {
@@ -96,5 +100,25 @@ class AuthFlowTest {
                         .content("{\"handle\":\"anyone\",\"nickname\":\"누구나\"}"))
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/auth/me")).andExpect(status().isNoContent());
+    }
+
+    /** The screen lives on another origin (GitHub Pages); only that origin may call with cookies. */
+    @Test
+    void onlyTheScreenOriginMayCallWithCookies() throws Exception {
+        mvc.perform(options("/api/auth/login")
+                        .header("Origin", "https://anglog.example")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "Content-Type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://anglog.example"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+
+        mvc.perform(options("/api/auth/login")
+                        .header("Origin", "https://evil.example")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(get("/api/auth/me").header("Origin", "https://anglog.example"))
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://anglog.example"));
     }
 }

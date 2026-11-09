@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.util.List;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -19,6 +20,27 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(new LoginUserArgumentResolver());
+    }
+
+    /**
+     * The screen (GitHub Pages, anglog.nobody-asked.dev) and the API (api.anglog.nobody-asked.dev) are
+     * different origins of the same site, so the session cookie (SameSite=Lax) still travels;
+     * the browser only needs this CORS permission, for exactly those origins.
+     */
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        List<String> origins = props.cors() == null || props.cors().allowedOrigins() == null
+                ? List.of()
+                : props.cors().allowedOrigins().stream().map(String::trim).filter(o -> !o.isEmpty()).toList();
+        if (origins.isEmpty()) {
+            return;
+        }
+        registry.addMapping("/api/**")
+                .allowedOrigins(origins.toArray(String[]::new))
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE")
+                .allowedHeaders("Content-Type")
+                .allowCredentials(true)
+                .maxAge(3600);
     }
 
     @Override

@@ -2,7 +2,8 @@
 # 앵로그 수동 배포. 서버에서 실행: anglog-deploy  (또는 infra/scripts/deploy.sh)
 #
 # - origin/main을 받아서 바뀐 부분의 컨테이너만 다시 빌드하고 교체한다
-#     backend/  → api,  realtime/ → realtime,  frontend/ → web,  infra/docker-compose.yml → 전부
+#     backend/  → api,  realtime/ → realtime,  infra/web.conf → web,  infra/docker-compose.yml → 전부
+#     frontend/ 는 서버가 아니라 GitHub Pages로 나간다 (.github/workflows/pages.yml)
 # - 문서만 바뀌었으면 코드만 갱신 (접속자 연결 유지)
 # - 교체 후 상태 확인이 실패하면 이전 커밋으로 되돌려 다시 띄운다. 같은 커밋은 FORCE=1 없이 다시 시도하지 않는다
 #
@@ -59,7 +60,7 @@ main() {
   else
     git diff --quiet "$old" "$new" -- backend/ || services+=(api)
     git diff --quiet "$old" "$new" -- realtime/ || services+=(realtime)
-    git diff --quiet "$old" "$new" -- frontend/ || services+=(web)
+    git diff --quiet "$old" "$new" -- infra/web.conf || services+=(web)
   fi
 
   git merge --ff-only --quiet "origin/$branch"
@@ -71,8 +72,9 @@ main() {
 
   up() {
     # 빌드를 먼저 끝내고 교체한다. 빌드하는 동안 기존 컨테이너는 계속 돈다
+    # (web은 빌드할 것이 없고, 설정 파일만 바뀌어도 새로 띄우도록 --force-recreate)
     (cd "$infra" && docker compose build "$@" >>"$log_file" 2>&1) || return 1
-    (cd "$infra" && docker compose up -d --remove-orphans "$@" >>"$log_file" 2>&1) || return 1
+    (cd "$infra" && docker compose up -d --force-recreate --remove-orphans "$@" >>"$log_file" 2>&1) || return 1
     healthy "$@"
   }
 
@@ -83,12 +85,12 @@ main() {
       case "$svc" in
         api) url=http://api:8080/actuator/health ;;
         realtime) url=http://realtime:8090/actuator/health ;;
-        web) url=http://127.0.0.1/ ;;
+        web) url=http://127.0.0.1/healthz ;;
         *) continue ;;
       esac
       local ok=0
       for _ in $(seq 1 60); do
-        if (cd "$infra" && docker compose exec -T web wget -q -O - "$url" 2>/dev/null | grep -qE '"status":"UP"|<html'); then ok=1; break; fi
+        if (cd "$infra" && docker compose exec -T web wget -q -O - "$url" 2>/dev/null | grep -qE '"status":"UP"|^ok'); then ok=1; break; fi
         sleep 2
       done
       if [[ $ok == 0 ]]; then
