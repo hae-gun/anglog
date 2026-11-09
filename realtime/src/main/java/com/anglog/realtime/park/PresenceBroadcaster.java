@@ -24,6 +24,7 @@ public class PresenceBroadcaster {
     @Scheduled(fixedRateString = "${angpark.presence-ms:200}")
     public void tick() {
         channels.drainAll((no, b) -> sender.broadcast(no,
-                Presence.of(no, b.online(), b.joined(), b.moved(), b.left(), b.looks(), b.emotes(), b.says())));
+                Presence.of(no, b.online(), b.joined(), b.moved(), b.left(), b.looks(), b.emotes(), b.says(),
+                        b.pranks(), b.answers(), b.calms())));
     }
 }

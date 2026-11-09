@@ -14,7 +14,8 @@ import org.springframework.web.socket.CloseStatus;
 
 /** End to end over real WebSockets: two birds see each other join, move, talk and leave. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"angpark.max-connections-per-ip=100", "angpark.say-min-gap-ms=0", "angpark.emote-min-gap-ms=0"})
+        properties = {"angpark.max-connections-per-ip=100", "angpark.say-min-gap-ms=0", "angpark.emote-min-gap-ms=0",
+                "angpark.prank-min-gap-ms=0"})
 class ParkFlowTest {
 
     @LocalServerPort
@@ -72,6 +73,39 @@ class ParkFlowTest {
             // leaving is announced
             b.close();
             a.await("presence", m -> has(m, "left", pid -> pid.asInt() == pidB));
+        }
+    }
+
+    @Test
+    void birdsPrankEachOtherAndAnswer() throws Exception {
+        try (TestClient a = TestClient.connect(port); TestClient b = TestClient.connect(port)) {
+            int pidA = a.hello("머란이").path("pid").asInt();
+            JsonNode wb = b.hello("보리");
+            int pidB = wb.path("pid").asInt();
+            // everyone starts at the gate, so they are close enough
+            a.send("{\"type\":\"prank\",\"to\":" + pidB + ",\"k\":0}");
+            b.await("presence", m -> has(m, "pranks", p -> p.get(0).asInt() == pidA && p.get(1).asInt() == pidB && p.get(2).asInt() == 0));
+
+            b.send("{\"type\":\"answer\",\"to\":" + pidA + ",\"a\":0}");
+            a.await("presence", m -> has(m, "answers", x -> x.get(0).asInt() == pidB && x.get(1).asInt() == pidA && x.get(2).asInt() == 0));
+
+            // a bird that does not take pranks: the prankster alone hears why
+            b.send("{\"type\":\"calm\",\"on\":true}");
+            a.await("presence", m -> has(m, "calms", x -> x.get(0).asInt() == pidB && x.get(1).asInt() == 1));
+            a.send("{\"type\":\"prank\",\"to\":" + pidB + ",\"k\":1}");
+            JsonNode no = a.await("prankNo");
+            assertThat(no.path("to").asInt()).isEqualTo(pidB);
+            assertThat(no.path("why").asText()).isEqualTo("calm");
+        }
+    }
+
+    @Test
+    void calmBirdsSayItInTheirHello() throws Exception {
+        try (TestClient a = TestClient.connect(port); TestClient b = TestClient.connect(port)) {
+            a.send("{\"type\":\"hello\",\"v\":1,\"calm\":true,\"look\":{\"name\":\"조용이\"}}");
+            int pidA = a.await("welcome").path("pid").asInt();
+            JsonNode wb = b.hello("보리");
+            assertThat(has(wb, "players", p -> p.path("pid").asInt() == pidA && p.path("calm").asBoolean())).isTrue();
         }
     }
 

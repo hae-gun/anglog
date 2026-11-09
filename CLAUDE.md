@@ -15,6 +15,7 @@
 - realtime/ : 앵파크 실시간 서버. 독립 Spring Boot 앱(com.anglog.realtime), 순수 WebSocket /ws, 메모리만, 포트 8090
   - 채널(공원 하나, 정원 50) 안의 변경을 200ms마다 한 번에 묶어 보냄. 고해야지 realtime-server의 방식만 가져왔고 그 서버에는 의존하지 않는다
   - 말은 정해진 문구 번호만(frontend/src/lib/phrases.ts와 angpark.phrase-count를 같이 바꿀 것). 이름과 모양은 LookRules가 조용히 고친다
+  - 장난치기(prank, answer, calm): 거리, 횟수, 무시 차단은 서버(Channel.prank, answer)가 판정하고, 밀려나기나 올라타기는 각자 자기 앵무만 움직인다. 규약 8장
 - 운영: 화면은 GitHub Pages(anglog.nobody-asked.dev, .github/workflows/pages.yml, 404.html은 index.html 복사본). API와 실시간은 서버(api.anglog.nobody-asked.dev)
 - infra/ : 서버 구성(docker-compose: db, api, realtime, web=안쪽 프록시 web.conf), 수동 배포 스크립트(anglog-deploy), 백업. 앞단 TLS는 고해야지 app 서버의 Nginx를 같이 쓴다. API는 CORS_ALLOWED_ORIGINS의 화면 주소만 쿠키와 함께 받는다. 순서와 주의는 infra/README.md
 - frontend/ : Vite + React 18 + TS, react-router 6, three 0.128

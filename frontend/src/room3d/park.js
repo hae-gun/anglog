@@ -28,6 +28,16 @@ const CHIRPS = ['짹짹!', '짹!', '삐요', '짹짹짹'];
 const REPLIES = ['짹!', '삐약', '누구야?', '반가워!', '짹짹', '안녕!'];
 const HELLO = ['안녕!', '처음 보는 얼굴이네', '짹! 같이 놀자', '단풍 예쁘지?'];
 const PLAY_LINES = ['신난다!', '한 번 더!', '짹짹짹!', '같이 춤추자'];
+// pranks between birds, by kind number (the same numbers go over the network: docs/park-realtime.md, 8)
+// me: what the prankster says, them: what the pranked bird says
+const PRANKS = [
+  { me: ['콕!', '콕콕!', '헤헤'], them: ['꽥!', '아야!', '뭐야!'] }, // 0 poke
+  { me: ['비켜!', '영차!', '내 자리야'], them: ['어어어!', '으악!', '왜 밀어!'] }, // 1 shove
+  { me: ['냠!', '내 거다!', '맛있다~'], them: ['내 간식!', '돌려줘!', '야!'] }, // 2 snatch a snack
+  { me: ['여기 좋다!', '높다!', '출발~'], them: ['무거워!', '내려와!', '머리가...'] }, // 3 sit on the head
+  { me: ['다듬어 줄게~'], them: ['고마워~'] }, // 4 pretend to preen, then poke
+];
+const MAKE_UP_LINES = [['미안해~', '헤헤'], ['우리 화해하자', '좋아!'], ['장난이었어', '알아~']];
 const MODE_CODE = { idle: 0, CALM: 0, WALK: 1, FLY: 2, DANCE: 3, HAPPY: 4, CHIRP: 5, PREEN: 6, SPLASH: 7 };
 const CODE_MODE = ['idle', 'WALK', 'FLY', 'DANCE', 'HAPPY', 'CHIRP', 'PREEN', 'SPLASH'];
 
@@ -77,12 +87,15 @@ const SLOT_ANGLES = (() => {
  * cards: RoomCard-like { owner, parrots, postedToday, mine? } in slot order.
  * opts.visitor: { name, colors, species }.
  * Callbacks: onEnter(handle), onBirdTap({ handle|null, nickname|null, birdName, remote }), onEmptyLot().
+ * Pranks: onPrank(pid, kind) when I prank a live bird (the page asks the server), onPranked({ id, name, remote, kind, back })
+ * when a bird pranks me or answers back, onAnswered({ id, name, remote, answer }) when one makes up (1) or flies off (2).
  * opts.startAt: a handle to come out of (back from that house), or null to fly in at the gate.
  * @param {HTMLElement} container
  * @param {any[]} cards
- * @param {{ visitor: any, startAt?: string | null, onEnter?: (h: string) => void, onBirdTap?: (who: any) => void, onEmptyLot?: () => void }} opts
+ * @param {{ visitor: any, startAt?: string | null, onEnter?: (h: string) => void, onBirdTap?: (who: any) => void, onEmptyLot?: () => void,
+ *   onPrank?: (pid: number, k: number) => void, onPranked?: (who: any) => void, onAnswered?: (who: any) => void }} opts
  */
-export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot } = /** @type {any} */ ({})) {
+export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot, onPrank, onPranked, onAnswered } = /** @type {any} */ ({})) {
   const env = skyNow();
   const small = Math.min(window.innerWidth, window.innerHeight) < 720;
   // ?night=1 and ?weather=rain|snow|clear try out the other looks (for checking, and for fun)
@@ -1252,6 +1265,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       const b = makeBird(p.colors, p.species);
       scene.add(b.group);
       const r = actor(b, p.name, { house: hh, pitch: [0.92, 1.05, 0.86, 1.12, 0.98][residents.length % 5] });
+      r.rid = 'r' + residents.length;
       if (j === 0 && residents.length % 3 === 0) {
         r.pos.copy(hh.perch);
         r.surface = 'perch';
@@ -1385,7 +1399,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   // ---- resident life ---------------------------------------------------------------------------
   let entering = null;
   function think(r) {
-    if (r.move || (r.action && r.action.until > clock)) return;
+    if (r.move || (r.action && r.action.until > clock) || r.riding || (r.riddenUntil ?? 0) > clock) return;
     // at night most birds stay asleep where they are, and the ones awake look for a branch
     if (env.night && (r.surface === 'branch' || r.surface === 'perch' || r.surface === 'canopy') && Math.random() < 0.85) return;
     const x = env.night ? Math.random() * 0.34 : Math.random();
@@ -1802,7 +1816,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   function remoteActor(pid, lk, s) {
     const b = makeBird(lk.colors, lk.species);
     scene.add(b.group);
-    const a = actor(b, lk.name, { remote: { pid, home: lk.home || null, target: new THREE.Vector3(s.x, s.y, s.z), ry: s.ry || 0, m: s.m || 0 } });
+    const a = actor(b, lk.name, { remote: { pid, home: lk.home || null, target: new THREE.Vector3(s.x, s.y, s.z), ry: s.ry || 0, m: s.m || 0, calm: !!s.calm } });
     a.pos.set(s.x, s.y, s.z);
     a.b.group.rotation.y = a.rotTarget = s.ry || 0;
     remotes.set(pid, a);
@@ -2345,6 +2359,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const steering = stepControl(dt);
     stepFlight(dt);
     stepRemotes(dt);
+    stepPranks(steering);
 
     actors.forEach((a) => {
       if (!a.remote) stepMove(a, dt);
@@ -2475,6 +2490,157 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   }
   raf = requestAnimationFrame(frame);
 
+  // ---- pranks: poke, shove, snatch a snack, ride on the head, fake preen ------------------------------
+  // Played locally on whoever is involved. With another person the server decides whether a prank
+  // happens (close enough, they take pranks, not too often); see Park.tsx and docs/park-realtime.md.
+  const timeline = []; // { at, fn }
+  const soon = (sec, fn) => timeline.push({ at: clock + sec, fn }); // seconds on the game clock
+  const dustMat = new THREE.MeshBasicMaterial({ color: 0xd9cbb4, transparent: true });
+  /** A little cloud of dust between two birds scuffling. */
+  function dust(a, b) {
+    const mid = a.pos.clone().lerp(b.pos, 0.5);
+    for (let i = 0; i < 10; i++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.14 + Math.random() * 0.12, 6, 5), dustMat.clone());
+      m.position.copy(mid).add(new THREE.Vector3((Math.random() - 0.5) * 1.1, 0.2 + Math.random() * 0.6, (Math.random() - 0.5) * 1.1));
+      scene.add(m);
+      sparks.push({ m, vy: 0.3 + Math.random() * 0.4, life: 1.2 });
+    }
+  }
+  /** A few feathers knocked loose. */
+  function feathersOff(a) {
+    const color = toLinear(a.b.colors?.body || '#9BC9A0');
+    for (let i = 0; i < 5; i++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.05, 5, 4), new THREE.MeshBasicMaterial({ color, transparent: true }));
+      m.scale.set(1, 0.35, 1.8);
+      m.position.copy(a.pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.5 + Math.random() * 0.5, (Math.random() - 0.5) * 0.6));
+      scene.add(m);
+      sparks.push({ m, vy: 0.25 + Math.random() * 0.3, life: 1.4 });
+    }
+  }
+  const headTop = (t) => t.pos.clone().add(new THREE.Vector3(0, 1.22 * (t.b.size || 1), 0));
+  const local = (a) => !a.remote;
+  /** Knocked off balance: slide a step away on the ground, or tumble off a branch. Only for birds this tab moves. */
+  function knock(t, from) {
+    if (!local(t) || entering) return;
+    const dx = t.pos.x - from.pos.x, dz = t.pos.z - from.pos.z, d = Math.hypot(dx, dz) || 1;
+    const p = groundPoint(t.pos.x + (dx / d) * 1.4, t.pos.z + (dz / d) * 1.4);
+    if (t.isPlayer) { flying = false; landing = false; }
+    t.riding = null;
+    t.action = null;
+    flyTo(t, p, 'ground', null);
+    t.move.peak = Math.max(t.pos.y, p.y) + 0.35;
+    t.move.dur = 0.45;
+  }
+  function hopAway(a, from, dist) {
+    if (!local(a)) return;
+    const dx = a.pos.x - from.pos.x, dz = a.pos.z - from.pos.z, d = Math.hypot(dx, dz) || 1;
+    goTo(a, groundPoint(a.pos.x + (dx / d) * dist, a.pos.z + (dz / d) * dist), 'ground', null);
+  }
+  function startRide(a, t, sec = 4) {
+    a.riding = { t, until: clock + sec };
+    a.move = null;
+    t.riddenUntil = clock + sec;
+    if (local(t)) t.move = null;
+    act(t, 'SQUISHED', sec);
+    act(a, 'PLAYFUL', sec);
+  }
+  function stopRide(a) {
+    const t = a.riding?.t;
+    a.riding = null;
+    if (t) {
+      t.riddenUntil = 0;
+      if (t.action && t.action.name === 'SQUISHED') t.action = null;
+    }
+    if (a.action && a.action.name === 'PLAYFUL') a.action = null;
+  }
+  function stepPranks(steering) {
+    for (let i = timeline.length - 1; i >= 0; i--) {
+      if (timeline[i].at <= clock) { const f = timeline[i].fn; timeline.splice(i, 1); f(); }
+    }
+    actors.forEach((a) => {
+      if (!a.riding) return;
+      const t = a.riding.t;
+      // the ride ends on time, when the mount leaves, or when I steer my own bird off
+      if (clock > a.riding.until || !actors.includes(t) || !t.b.group.visible || (a.isPlayer && steering)) {
+        stopRide(a);
+        if (local(a) && !(a.isPlayer && steering)) { const s = besides(t); flyTo(a, s.p, s.surface, () => say(a, '착지!', 1)); }
+        return;
+      }
+      a.pos.copy(headTop(t));
+      a.rotTarget = t.b.group.rotation.y;
+    });
+  }
+  /** Plays a prank of kind k by a on t. Effects on a bird only happen where that bird is driven (local). */
+  function playPrank(a, t, k) {
+    const P = PRANKS[k] || PRANKS[0];
+    if (!a.riding) faceEachOther(a, t);
+    if (local(t) && !t.riding && !(k === 3)) t.rotTarget = angleTo(t.pos, a.pos);
+    const ouch = () => { act(t, 'BONKED', 1.1); say(t, pick(P.them), 1.4); playCall('call', t.pitch ?? 1, loudness(t)); };
+    if (k === 0) {
+      act(a, 'POKE', 0.45); say(a, pick(P.me), 1);
+      soon(0.15, () => { ouch(); feathersOff(t); });
+    } else if (k === 1) {
+      act(a, 'SHOVE', 0.6); say(a, pick(P.me), 1.1);
+      soon(0.2, () => { ouch(); knock(t, a); });
+    } else if (k === 2) {
+      act(a, 'POKE', 0.35);
+      soon(0.25, () => { act(a, 'EAT', 1.3); say(a, pick(P.me), 1.2); ouch(); playFx('crunch', 0.3); });
+      soon(1.4, () => hopAway(a, t, 2.2));
+    } else if (k === 3) {
+      say(a, pick(P.me), 1.4);
+      if (local(a)) {
+        flyTo(a, headTop(t), 'air', () => { startRide(a, t); say(t, pick(P.them), 1.6); playCall('call', t.pitch ?? 1, loudness(t)); });
+      } else {
+        // someone else's bird: their own tab flies it onto the head; here the mount just squashes
+        soon(0.6, () => { t.riddenUntil = clock + 4; act(t, 'SQUISHED', 4); say(t, pick(P.them), 1.6); });
+      }
+    } else {
+      act(a, 'PREEN', 1.1); act(t, 'PETTED', 1.1);
+      say(a, P.me[0], 1.1); soon(0.4, () => say(t, P.them[0], 0.8));
+      soon(1.15, () => { act(a, 'POKE', 0.45); say(a, '콕!', 1); });
+      soon(1.3, () => { act(t, 'BONKED', 1.1); say(t, '...아야!', 1.4); feathersOff(t); playCall('call', t.pitch ?? 1, loudness(t)); });
+    }
+  }
+  /** x answers the prank y played on it: 0 back, 1 make up, 2 ignore and fly off. */
+  function playAnswer(x, y, ans) {
+    if (ans === 0) {
+      playPrank(x, y, 0);
+      soon(0.3, () => { dust(x, y); say(x, '투닥투닥!', 1.2); });
+    } else if (ans === 1) {
+      faceEachOther(x, y);
+      if (local(y)) y.rotTarget = angleTo(y.pos, x.pos);
+      const [l1, l2] = pick(MAKE_UP_LINES);
+      act(x, 'PREEN', 1.6); act(y, 'PETTED', 1.6);
+      say(x, l1, 1.4); soon(0.6, () => say(y, l2, 1.2));
+      soon(0.3, () => hearts(x.pos.clone().lerp(y.pos, 0.5)));
+    } else {
+      act(x, 'GRUMPY', 0.8); say(x, '흥!', 1.2);
+      soon(0.5, () => {
+        if (!local(x)) return;
+        const dx = x.pos.x - y.pos.x, dz = x.pos.z - y.pos.z, d = Math.hypot(dx, dz) || 1;
+        flyTo(x, groundPoint(x.pos.x + (dx / d) * 6, x.pos.z + (dz / d) * 6), 'ground', null);
+      });
+      soon(0.9, () => say(y, pick(['...', '삐졌나?', '같이 놀자~']), 1.2));
+    }
+  }
+  const whoOf = (a) => (a.remote ? { id: a.remote.pid, name: a.name, remote: true } : { id: a.rid, name: a.name, remote: false });
+  function actorOf(id) {
+    if (typeof id === 'number') return remotes.get(id) || null;
+    return residents.find((r) => r.rid === id) || null;
+  }
+  /** A resident bird decides how to take a prank: often back (투닥!), sometimes makes up, sometimes leaves. */
+  function residentAnswers(r, depth) {
+    soon(0.9 + Math.random() * 0.6, () => {
+      if (!actors.includes(r) || r.riding) return;
+      const back = Math.random() < Math.max(0.15, 0.55 - depth * 0.15);
+      const ans = back ? 0 : Math.random() < 0.65 ? 1 : 2;
+      playAnswer(r, player, ans);
+      if (ans === 0 && onPranked) onPranked({ ...whoOf(r), kind: 0, back: true });
+      if (ans !== 0 && onAnswered) onAnswered({ ...whoOf(r), answer: ans });
+    });
+  }
+  let tudakDepth = 0;
+
   // ---- what the page can call ----------------------------------------------------------------
   const api = {
     /** Joystick vector, x right and y forward, each -1..1. */
@@ -2531,6 +2697,64 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       }
       return r.name;
     },
+    /** The nearest bird I could prank, or null. */
+    prankTarget() {
+      const r = nearestFriend();
+      if (!r || r.pos.distanceTo(player.pos) > 12) return null;
+      return { ...whoOf(r), calm: !!(r.remote && r.remote.calm) };
+    },
+    /**
+     * Prank the nearest bird with kind k: walk over, then play it. With a live bird, onPrank(pid, k) asks the
+     * server once I am next to it. Returns { ok, why?, name? }; why is 'none' or 'calm'.
+     */
+    prank(k) {
+      if (entering) return { ok: false, why: 'none' };
+      const r = nearestFriend();
+      if (!r || r.pos.distanceTo(player.pos) > 12) return { ok: false, why: 'none' };
+      if (r.remote && r.remote.calm) return { ok: false, why: 'calm', name: r.name };
+      if (player.riding) stopRide(player);
+      player.move = null;
+      player.action = null;
+      const go = () => {
+        playPrank(player, r, k);
+        if (r.remote) { if (onPrank) onPrank(r.remote.pid, k); }
+        else { tudakDepth = 0; residentAnswers(r, 0); }
+      };
+      const close = r.pos.distanceTo(player.pos) < 1.6 && Math.abs(r.pos.y - player.pos.y) < 0.4;
+      if (close || k === 3) go();
+      else { const s = besides(r); goTo(player, s.p, s.surface, go); }
+      return { ok: true, name: r.name };
+    },
+    /** My answer to a prank by who (from onPranked): 0 back, 1 make up, 2 ignore. */
+    answer(who, ans) {
+      const y = actorOf(who.id);
+      if (!y) return;
+      playAnswer(player, y, ans);
+      if (!y.remote && ans === 0) { tudakDepth += 1; residentAnswers(y, tudakDepth); }
+    },
+    /** Someone else's prank arrived from the server. toPid null means it was on me. */
+    prankRemote(fromPid, toPid, k) {
+      const a = remotes.get(fromPid);
+      const t = toPid == null ? player : remotes.get(toPid);
+      if (!a || !t) return;
+      playPrank(a, t, k);
+      if (t === player && onPranked) onPranked({ ...whoOf(a), kind: k, back: false });
+    },
+    /** Someone answered a prank. toPid null means they answered mine. */
+    answerRemote(fromPid, toPid, ans) {
+      const x = remotes.get(fromPid);
+      const y = toPid == null ? player : remotes.get(toPid);
+      if (!x || !y) return;
+      playAnswer(x, y, ans);
+      if (y !== player) return;
+      if (ans === 0 && onPranked) onPranked({ ...whoOf(x), kind: 0, back: true });
+      else if (ans !== 0 && onAnswered) onAnswered({ ...whoOf(x), answer: ans });
+    },
+    /** Whether a live bird takes pranks. */
+    calmRemote(pid, on) {
+      const a = remotes.get(pid);
+      if (a) a.remote.calm = !!on;
+    },
     /** Fly to a house and go in. False when that house is not in this park. */
     enter(handle) {
       const hh = houses.find((x) => x.handle === handle);
@@ -2555,7 +2779,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     lookRemote(pid, lk) {
       const a = remotes.get(pid);
       if (!a) return;
-      const s = { x: a.remote.target.x, y: a.remote.target.y, z: a.remote.target.z, ry: a.remote.ry, m: a.remote.m };
+      const s = { x: a.remote.target.x, y: a.remote.target.y, z: a.remote.target.z, ry: a.remote.ry, m: a.remote.m, calm: a.remote.calm };
       dropActor(a);
       remotes.delete(pid);
       remoteActor(pid, lk, s);

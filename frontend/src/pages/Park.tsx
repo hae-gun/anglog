@@ -6,7 +6,7 @@ import { Joystick } from '../components/Joystick';
 import { ParrotForm } from '../components/ParrotForm';
 import { GuestBird, loadGuestBird, saveGuestBird } from '../lib/guestBird';
 import { timeAgo } from '../lib/image';
-import { connectPark, NetClient, NetLook, NetPlayer, NetState, NetStatus, realtimeUrl } from '../lib/parkNet';
+import { connectPark, NetClient, NetLook, NetPlayer, NetState, NetStatus, PrankNo, realtimeUrl } from '../lib/parkNet';
 import { PHRASES } from '../lib/phrases';
 import { isMuted, setMuted } from '../lib/sound';
 import { mountPark } from '../room3d/park.js';
@@ -33,8 +33,17 @@ interface Controller {
   clearRemotes(): void;
   emoteRemote(pid: number, id: string): void;
   sayRemote(pid: number, text: string): void;
+  prankTarget(): (Who & { calm: boolean }) | null;
+  prank(k: number): { ok: boolean; why?: 'none' | 'calm'; name?: string };
+  answer(who: Who, a: number): void;
+  prankRemote(from: number, to: number | null, k: number): void;
+  answerRemote(from: number, to: number | null, a: number): void;
+  calmRemote(pid: number, on: boolean): void;
   dispose(): void;
 }
+/** A bird I can prank or that pranked me: a live player (pid) or a resident of a house (r0, r1...). */
+interface Who { id: number | string; name: string; remote: boolean }
+type Pranked = Who & { kind: number; back: boolean };
 type ParkCard = RoomCard & { mine?: boolean };
 type BirdPop = { handle: string | null; nickname: string | null; birdName: string; remote: boolean };
 
@@ -43,6 +52,53 @@ const INVITE_KEY = 'anglog-invite-seen';
 const INVITE_AFTER_MS = 3 * 60 * 1000;
 const BIRD_KEY = 'anglog-park-bird';
 const VIEW_KEY = 'anglog-park-view';
+const CALM_KEY = 'anglog-park-calm';
+const TUDAK_KEY = 'anglog-park-tudak';
+const ANSWER_MS = 8000;
+
+// what each prank is called on the button, and how it reads when it happens to me
+const PRANKS = [
+  { label: '콕 찌르기', did: '콕 찔렀어요' },
+  { label: '밀치기', did: '밀쳤어요' },
+  { label: '간식 뺏기', did: '간식을 뺏어 먹었어요' },
+  { label: '머리 위에 올라타기', did: '머리 위에 올라탔어요' },
+  { label: '다듬는 척 콕', did: '깃털을 다듬어 주는 척하다 콕 찔렀어요' },
+];
+const PRANK_NO: Record<PrankNo, string> = {
+  calm: '지금은 장난 받지 않는 앵무예요.',
+  far: '조금 더 가까이 가야 장난칠 수 있어요.',
+  wait: '조금 있다가 다시 장난쳐요.',
+  blocked: '계속 무시당해서 그 앵무한테는 잠깐 장난을 못 쳐요.',
+  gone: '그 앵무는 벌써 떠났어요.',
+};
+/** 이/가 after a Korean name: by whether its last syllable ends in a consonant. */
+function iGa(name: string) {
+  const c = name.charCodeAt(name.length - 1);
+  if (c < 0xac00 || c > 0xd7a3) return `${name}${/[a-zA-Z]$/.test(name) ? '가' : '(이)가'}`;
+  return `${name}${(c - 0xac00) % 28 ? '이' : '가'}`;
+}
+/** Today's back-and-forths with each bird, on this device: the 투닥 친구 of the day. */
+function bumpTudak(name: string): number {
+  const today = new Date().toLocaleDateString('sv-SE');
+  let data: { day: string; counts: Record<string, number> } = { day: today, counts: {} };
+  try {
+    const old = JSON.parse(localStorage.getItem(TUDAK_KEY) || 'null');
+    if (old && old.day === today) data = old;
+  } catch { /* private mode or bad data */ }
+  data.counts[name] = (data.counts[name] || 0) + 1;
+  try { localStorage.setItem(TUDAK_KEY, JSON.stringify(data)); } catch { /* private mode */ }
+  return data.counts[name];
+}
+function topTudak(): { name: string; n: number } | null {
+  try {
+    const data = JSON.parse(localStorage.getItem(TUDAK_KEY) || 'null');
+    if (!data || data.day !== new Date().toLocaleDateString('sv-SE')) return null;
+    const best = Object.entries(data.counts as Record<string, number>).sort((p, q) => q[1] - p[1])[0];
+    return best ? { name: best[0], n: best[1] } : null;
+  } catch {
+    return null;
+  }
+}
 const readKey = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const writeKey = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
 
@@ -59,7 +115,13 @@ export function ParkPage() {
   const [rooms, setRooms] = useState<RoomCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guest, setGuest] = useState<GuestBird>(loadGuestBird);
-  const [sheet, setSheet] = useState<null | 'list' | 'dress' | 'say' | 'birds'>(null);
+  const [sheet, setSheet] = useState<null | 'list' | 'dress' | 'say' | 'birds' | 'prank'>(null);
+  const [calm, setCalm] = useState(() => readKey(CALM_KEY) === '1');
+  const calmRef = useRef(calm);
+  calmRef.current = calm;
+  const [pranked, setPranked] = useState<Pranked | null>(null);
+  const [tudak, setTudak] = useState(topTudak);
+  const [prankTarget, setPrankTarget] = useState<string | null>(null);
   const [bird, setBird] = useState<BirdPop | null>(null);
   const [hint, setHint] = useState(true);
   const [muted, setMute] = useState(isMuted());
@@ -117,6 +179,16 @@ export function ParkPage() {
         startAt: startAt.current,
         onEnter: (handle: string) => navigate(`/play/${handle}`),
         onBirdTap: (who: BirdPop) => setBird(who),
+        onPrank: (pid: number, k: number) => net.current?.prank(pid, k),
+        onPranked: (who: Pranked) => {
+          if (who.back) countTudak(who.name);
+          // with pranks turned off, a live bird cannot reach me; a resident only answers my own pranks
+          if (calmRef.current && who.remote) return;
+          setPranked(who);
+        },
+        onAnswered: (who: Who & { answer: number }) => {
+          setToast(who.answer === 1 ? `${iGa(who.name)} 화해했어요.` : `${iGa(who.name)} 흥 하고 날아갔어요.`);
+        },
         onEmptyLot: () => setToast(
           me && parrots.length ? '새 이웃을 기다리는 빈 터예요.'
             : me ? '내 앵무를 등록하면 여기에 우리 집이 생겨요.'
@@ -125,7 +197,7 @@ export function ParkPage() {
       ctl.current = c;
       mountedKey.current = visitorKey;
       if (viewRef.current === 'first') c.setView('first');
-      others.current.forEach((p) => c.addRemote(p.pid, p.look, p));
+      others.current.forEach((p) => { c.addRemote(p.pid, p.look, p); });
     } catch {
       setBroken(true);
     }
@@ -183,9 +255,17 @@ export function ParkPage() {
         ctl.current?.lookRemote(pid, lk);
       },
       emote: (pid, id) => ctl.current?.emoteRemote(pid, id),
+      prank: (from, to, k, toMe) => ctl.current?.prankRemote(from, toMe ? null : to, k),
+      answer: (from, to, a, toMe) => ctl.current?.answerRemote(from, toMe ? null : to, a),
+      calm: (pid, on) => {
+        const p = map.get(pid);
+        if (p) p.calm = on;
+        ctl.current?.calmRemote(pid, on);
+      },
+      prankNo: (_to, why) => setToast(PRANK_NO[why] ?? '지금은 장난칠 수 없어요.'),
       say: (pid, n) => { if (PHRASES[n]) ctl.current?.sayRemote(pid, PHRASES[n]); },
       online: setOnline,
-    });
+    }, calmRef.current);
     net.current = client;
     return () => {
       client.close();
@@ -225,6 +305,39 @@ export function ParkPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  useEffect(() => {
+    if (!pranked) return;
+    const t = setTimeout(() => setPranked(null), ANSWER_MS);
+    return () => clearTimeout(t);
+  }, [pranked]);
+
+  function countTudak(name: string) {
+    const n = bumpTudak(name);
+    setTudak(topTudak());
+    if (n > 1) setToast(`오늘 ${name}랑 ${n}번째 투닥투닥!`);
+  }
+  function answerPrank(a: number) {
+    if (!pranked) return;
+    const who = pranked;
+    setPranked(null);
+    ctl.current?.answer(who, a);
+    if (who.remote) net.current?.answer(who.id as number, a);
+    if (a === 0) countTudak(who.name);
+  }
+  function doPrank(k: number) {
+    setSheet(null);
+    const r = ctl.current?.prank(k);
+    if (!r) return;
+    if (!r.ok) setToast(r.why === 'calm' ? `${r.name}는 지금 장난 받지 않아요.` : '근처에 장난칠 앵무가 없어요. 다른 앵무 곁으로 가 봐요.');
+  }
+  function toggleCalm() {
+    const next = !calm;
+    setCalm(next);
+    writeKey(CALM_KEY, next ? '1' : '0');
+    net.current?.setCalm(next);
+    if (next) setPranked(null);
+  }
+
   async function surf() {
     const next = await api.randomRoom(null);
     if (!next) return setToast('아직 놀러갈 집이 없어요.');
@@ -251,6 +364,7 @@ export function ParkPage() {
             {status === 'online' ? `${online}마리 노는 중` : status === 'connecting' ? '연결 중' : '혼자 노는 중'}
           </span>
         )}
+        {tudak && <span className="play-chip park-tudak" title="오늘 가장 많이 투닥거린 앵무">투닥 친구 {tudak.name} {tudak.n}번</span>}
         <span className="grow" />
         {parrots.length > 1 && (
           <button className="play-chip park-me" onClick={() => setSheet('birds')} aria-label={`앵무 바꾸기, 지금은 ${visitor.name}`}>
@@ -281,6 +395,18 @@ export function ParkPage() {
           </div>
           {bird.handle && <button className="btn small primary" onClick={() => visit(bird.handle!)}>집에 놀러가기</button>}
           {bird.handle && <Link className="btn small" to={`/room/${bird.handle}`}>일기</Link>}
+        </div>
+      )}
+
+      {pranked && (
+        <div className="park-prank" role="alertdialog" aria-label="장난에 답하기">
+          <p><b>{iGa(pranked.name)}</b> {pranked.back ? '되받아쳤어요!' : `${PRANKS[pranked.kind]?.did ?? '장난쳤어요'}!`}</p>
+          <div className="row">
+            <button className="btn small primary" onClick={() => answerPrank(0)}>되받아치기</button>
+            <button className="btn small" onClick={() => answerPrank(1)}>화해하기</button>
+            <button className="btn small ghost" onClick={() => answerPrank(2)}>무시하고 날아가기</button>
+          </div>
+          <span className="park-prank-timer" style={{ animationDuration: `${ANSWER_MS}ms` }} key={`${pranked.id}-${pranked.kind}-${pranked.back}`} aria-hidden="true" />
         </div>
       )}
 
@@ -317,6 +443,7 @@ export function ParkPage() {
             if (ctl.current?.playTogether() == null) setToast('근처에 같이 놀 앵무가 없어요.');
             else net.current?.emote('dance');
           }}>같이 놀기</button>
+          <button className="pbtn" onClick={() => { const t = ctl.current?.prankTarget(); setPrankTarget(t ? t.name : null); setSheet('prank'); }}>장난</button>
           <button className="pbtn" onClick={() => { if (ctl.current?.snack() === 'wait') setToast('방금 줬어요. 다 먹고 나면 또 줘요.'); }}>간식</button>
           <div className="park-small">
             {myBird && me
@@ -331,7 +458,7 @@ export function ParkPage() {
       {sheet && (
         <div className="sheet-backdrop" onClick={() => setSheet(null)}>
           <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-            aria-label={sheet === 'list' ? '집 목록' : sheet === 'say' ? '말하기' : sheet === 'birds' ? '앵무 바꾸기' : '앵무 꾸미기'}>
+            aria-label={sheet === 'list' ? '집 목록' : sheet === 'say' ? '말하기' : sheet === 'birds' ? '앵무 바꾸기' : sheet === 'prank' ? '장난치기' : '앵무 꾸미기'}>
             <button className="sheet-close btn ghost small" onClick={() => setSheet(null)}>닫기</button>
 
             {sheet === 'birds' && (
@@ -347,6 +474,23 @@ export function ParkPage() {
                     </button>
                   ))}
                 </div>
+              </>
+            )}
+
+            {sheet === 'prank' && (
+              <>
+                <h2 className="section-title">{prankTarget ? `${prankTarget}한테 장난치기` : '장난치기'}</h2>
+                {!prankTarget && <p className="lede">근처에 앵무가 없어요. 다른 앵무 곁으로 가서 눌러 봐요.</p>}
+                <div className="phrases">
+                  {PRANKS.map((p, i) => (
+                    <button key={p.label} className="chip" disabled={!prankTarget} onClick={() => doPrank(i)}>{p.label}</button>
+                  ))}
+                </div>
+                <label className="park-calm">
+                  <input type="checkbox" checked={calm} onChange={toggleCalm} />
+                  <span>다른 앵무의 장난 받지 않기</span>
+                </label>
+                <p className="hint">장난을 받으면 되받아치거나, 화해하거나, 무시하고 날아갈 수 있어요. 두 번 연속 무시하면 그 앵무는 1분 동안 장난을 못 쳐요.</p>
               </>
             )}
 

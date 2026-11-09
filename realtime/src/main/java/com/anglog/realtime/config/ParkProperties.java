@@ -23,5 +23,12 @@ public record ParkProperties(
         @DefaultValue("12") int phraseCount,
         @DefaultValue("") String blockedWordsFile,
         @DefaultValue("60") double worldLimit,
-        @DefaultValue("12") double heightLimit) {
+        @DefaultValue("12") double heightLimit,
+        // pranks: how close, how often, how long an answer may wait, and how a target says "enough"
+        @DefaultValue("3.2") double prankRange,
+        @DefaultValue("700") long prankMinGapMs,
+        @DefaultValue("2500") long prankSameTargetGapMs,
+        @DefaultValue("9000") long prankAnswerWindowMs,
+        @DefaultValue("2") int prankIgnoreLimit,
+        @DefaultValue("60000") long prankBlockMs) {
 }

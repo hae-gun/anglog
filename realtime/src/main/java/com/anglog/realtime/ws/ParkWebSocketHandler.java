@@ -3,12 +3,14 @@ package com.anglog.realtime.ws;
 import com.anglog.realtime.config.ParkProperties;
 import com.anglog.realtime.park.Channel;
 import com.anglog.realtime.park.Channels;
+import com.anglog.realtime.park.PrankRules;
 import com.anglog.realtime.protocol.CloseCodes;
 import com.anglog.realtime.protocol.LookRules;
 import com.anglog.realtime.protocol.Messages;
 import com.anglog.realtime.protocol.Messages.ErrorMessage;
 import com.anglog.realtime.protocol.Messages.Look;
 import com.anglog.realtime.protocol.Messages.Pong;
+import com.anglog.realtime.protocol.Messages.PrankNo;
 import com.anglog.realtime.protocol.Messages.Welcome;
 import com.anglog.realtime.protocol.Pose;
 import com.anglog.realtime.session.ClientSession;
@@ -28,7 +30,8 @@ import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorato
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 /**
- * Every inbound frame. Implements docs/park-realtime.md v1: hello/welcome, ping/pong, move, look, emote, say.
+ * Every inbound frame. Implements docs/park-realtime.md v1: hello/welcome, ping/pong, move, look, emote, say,
+ * and pranks between birds (prank, answer, calm).
  * Anything too fast is dropped without an answer; the browser has already shown it to its own player.
  */
 @Component
@@ -39,6 +42,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
     // a welcome of a full channel: 50 players of roughly 250 bytes
     private static final int SEND_BUFFER_LIMIT_BYTES = 128 * 1024;
     static final Set<String> EMOTES = Set.of("chirp", "dance");
+    private static final long CALM_MIN_GAP_MS = 1_000;
 
     private final ParkProperties props;
     private final SessionRegistry registry;
@@ -46,6 +50,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
     private final LookRules looks;
     private final MessageSender sender;
     private final ObjectMapper mapper;
+    private final PrankRules prankRules;
 
     public ParkWebSocketHandler(ParkProperties props, SessionRegistry registry, Channels channels, LookRules looks,
                                 MessageSender sender, ObjectMapper mapper) {
@@ -55,6 +60,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         this.looks = looks;
         this.sender = sender;
         this.mapper = mapper;
+        this.prankRules = PrankRules.from(props);
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -116,6 +122,9 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
             case "look" -> onLook(session, msg);
             case "emote" -> onEmote(session, msg);
             case "say" -> onSay(session, msg);
+            case "prank" -> onPrank(session, msg);
+            case "answer" -> onAnswer(session, msg);
+            case "calm" -> onCalm(session, msg);
             default -> sender.send(session, ErrorMessage.of(Messages.ERR_UNKNOWN_TYPE, "unknown type: " + type));
         }
     }
@@ -134,7 +143,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         if (pose == null) {
             pose = new Pose(0, 0, 23, 0, 0); // the ginkgo gate
         }
-        Channels.Joined joined = channels.enter(look, pose);
+        Channels.Joined joined = channels.enter(look, pose, msg.path("calm").asBoolean(false));
         Channel channel = joined.channel();
         session.ready(channel.no(), joined.pid(), now());
         // into the broadcast set before the snapshot, so nothing falls between them;
@@ -195,6 +204,51 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         Channel channel = channels.get(session.channelNo());
         if (channel != null) {
             channel.say(session.pid(), n.asInt());
+        }
+    }
+
+    private void onPrank(ClientSession session, JsonNode msg) {
+        JsonNode to = msg.get("to");
+        JsonNode k = msg.get("k");
+        if (to == null || !to.isInt() || k == null || !k.isInt() || k.asInt() < 0 || k.asInt() >= PrankRules.KINDS) {
+            return;
+        }
+        long now = now();
+        if (!session.acceptPrank(now, props.prankMinGapMs())) {
+            sender.send(session, PrankNo.of(to.asInt(), "wait"));
+            return;
+        }
+        Channel channel = channels.get(session.channelNo());
+        if (channel == null) {
+            return;
+        }
+        Channel.PrankResult r = channel.prank(session.pid(), to.asInt(), k.asInt(), now, prankRules);
+        if (r != Channel.PrankResult.OK) {
+            sender.send(session, PrankNo.of(to.asInt(), r.name().toLowerCase()));
+        }
+    }
+
+    private void onAnswer(ClientSession session, JsonNode msg) {
+        JsonNode to = msg.get("to");
+        JsonNode a = msg.get("a");
+        if (to == null || !to.isInt() || a == null || !a.isInt() || a.asInt() < 0 || a.asInt() >= PrankRules.ANSWERS) {
+            return;
+        }
+        Channel channel = channels.get(session.channelNo());
+        if (channel != null) {
+            // a late or made-up answer has no waiting prank and is dropped
+            channel.answer(session.pid(), to.asInt(), a.asInt(), now(), prankRules);
+        }
+    }
+
+    private void onCalm(ClientSession session, JsonNode msg) {
+        JsonNode on = msg.get("on");
+        if (on == null || !on.isBoolean() || !session.acceptCalm(now(), CALM_MIN_GAP_MS)) {
+            return;
+        }
+        Channel channel = channels.get(session.channelNo());
+        if (channel != null) {
+            channel.calm(session.pid(), on.asBoolean());
         }
     }
 

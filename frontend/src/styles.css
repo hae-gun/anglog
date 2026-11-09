@@ -328,6 +328,17 @@ img { max-width: 100%; display: block; }
 .park-invite b { font: 19px/1.2 var(--display); }
 .park-invite p { margin: 8px 0 12px; font-size: 14px; }
 .park-toast { bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
+.park-prank { position: absolute; z-index: 5; left: 8px; right: 8px; top: calc(56px + env(safe-area-inset-top, 0px)); margin: 0 auto; max-width: 520px; padding: 10px 12px 12px; border: 2px solid var(--ink); border-radius: 14px; background: #FFF3C4; box-shadow: var(--shadow); overflow: hidden; animation: prank-in 0.25s ease-out; }
+.park-prank p { margin: 0 0 8px; font-size: 15px; }
+.park-prank b { font: 17px/1.2 var(--display); }
+.park-prank .row { flex-wrap: wrap; gap: 6px; }
+.park-prank-timer { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--ink); transform-origin: left; animation: prank-timer linear forwards; }
+@keyframes prank-in { from { transform: translateY(12px) rotate(-1.5deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes prank-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .park-prank { animation: none; } }
+.park-calm { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 14px; }
+.park-calm input { width: 18px; height: 18px; }
+.park-tudak { background: #FFF3C4; }
 .phrases { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .phrases .chip { min-height: 40px; font-size: 15px; }
 .owner-pitch { margin-top: 18px; padding: 12px; border: 2px dashed var(--ink); border-radius: 12px; background: #FFF1C9; }

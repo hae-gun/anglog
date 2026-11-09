@@ -36,5 +36,12 @@ angpark:
   emote-min-gap-ms: 600
   # must match PHRASES in frontend/src/lib/phrases.ts
   phrase-count: 12
+  # pranks between birds: docs/park-realtime.md, 8
+  prank-range: 3.2
+  prank-min-gap-ms: 700
+  prank-same-target-gap-ms: 2500
+  prank-answer-window-ms: 9000
+  prank-ignore-limit: 2
+  prank-block-ms: 60000
   # optional: a file with one blocked word per line, kept out of git
   blocked-words-file: ${ANGPARK_BLOCKED_WORDS_FILE:}

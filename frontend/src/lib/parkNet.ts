@@ -22,7 +22,11 @@ export interface NetState {
 export interface NetPlayer extends NetState {
   pid: number;
   look: NetLook;
+  /** does not take pranks */
+  calm?: boolean;
 }
+/** Why the server turned my prank down. */
+export type PrankNo = 'calm' | 'far' | 'wait' | 'blocked' | 'gone';
 export type NetStatus = 'connecting' | 'online' | 'offline';
 
 export interface NetHandlers {
@@ -35,12 +39,21 @@ export interface NetHandlers {
   emote(pid: number, id: string): void;
   say(pid: number, n: number): void;
   online(n: number): void;
+  /** from pranked to with kind k; toMe when the prank was on me */
+  prank(from: number, to: number, k: number, toMe: boolean): void;
+  /** from answered the prank to played on them (0 back, 1 make up, 2 ignore); toMe when it was my prank */
+  answer(from: number, to: number, a: number, toMe: boolean): void;
+  calm(pid: number, on: boolean): void;
+  prankNo(to: number, why: PrankNo): void;
 }
 
 export interface NetClient {
   emote(id: 'chirp' | 'dance'): void;
   say(n: number): void;
   setLook(look: NetLook): void;
+  prank(to: number, k: number): void;
+  answer(to: number, a: number): void;
+  setCalm(on: boolean): void;
   close(): void;
 }
 
@@ -54,8 +67,9 @@ export function realtimeUrl(): string | null {
 
 const round = (v: number) => Math.round(v * 100) / 100;
 
-export function connectPark(url: string, firstLook: NetLook, getState: () => NetState | null, on: NetHandlers): NetClient {
+export function connectPark(url: string, firstLook: NetLook, getState: () => NetState | null, on: NetHandlers, firstCalm = false): NetClient {
   let look = firstLook;
+  let calm = firstCalm;
   let ws: WebSocket | null = null;
   let me = -1;
   let closedByUs = false;
@@ -79,7 +93,7 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
     }
     ws.onopen = () => {
       const s = getState() ?? { x: 0, y: 0, z: 23, ry: 0, m: 0 };
-      send({ type: 'hello', v: PROTOCOL_VERSION, look, ...pos(s) });
+      send({ type: 'hello', v: PROTOCOL_VERSION, look, calm, ...pos(s) });
     };
     ws.onmessage = (ev) => {
       let msg: any;
@@ -107,10 +121,16 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
           (msg.looks ?? []).forEach((l: { pid: number; look: NetLook }) => l.pid !== me && on.look(l.pid, l.look));
           (msg.emotes ?? []).forEach((e: [number, string]) => e[0] !== me && on.emote(e[0], e[1]));
           (msg.says ?? []).forEach((e: [number, number]) => e[0] !== me && on.say(e[0], e[1]));
+          (msg.calms ?? []).forEach((c: [number, number]) => c[0] !== me && on.calm(c[0], c[1] === 1));
+          (msg.pranks ?? []).forEach((e: [number, number, number]) => e[0] !== me && on.prank(e[0], e[1], e[2], e[1] === me));
+          (msg.answers ?? []).forEach((e: [number, number, number]) => e[0] !== me && on.answer(e[0], e[1], e[2], e[1] === me));
           (msg.left ?? []).forEach((pid: number) => on.left(pid));
           if (typeof msg.online === 'number') on.online(msg.online);
           break;
         }
+        case 'prankNo':
+          on.prankNo(msg.to, msg.why);
+          break;
         default:
           break;
       }
@@ -167,6 +187,16 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
     setLook(next) {
       look = next;
       send({ type: 'look', look });
+    },
+    prank(to, k) {
+      send({ type: 'prank', to, k });
+    },
+    answer(to, a) {
+      send({ type: 'answer', to, a });
+    },
+    setCalm(on) {
+      calm = on;
+      send({ type: 'calm', on });
     },
     close() {
       closedByUs = true;

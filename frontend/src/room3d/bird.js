@@ -640,13 +640,56 @@ export function makeBird(colors, species) {
       case 'BEG':
         eyeY = Math.min(eyeY, beg(1, 1, tt));
         break;
+      // ---- pranks between birds (park.js) ----
+      case 'POKE': {
+        // a quick jab of the beak at the bird in front, the body leaning into it
+        const k = Math.max(0, Math.sin(tt * 16));
+        head.position.x = hx + 0.24 * k;
+        head.position.y = hy - 0.04 * k;
+        head.rotation.z = -0.2 * k;
+        inner.rotation.z = -0.22 * k;
+        inner.position.x = 0.06 * k;
+        beak.scale.set(1, 1 + 0.3 * k, 1.1);
+        if (head.userData.crest) head.userData.crest.rotation.z = -0.5;
+        break;
+      }
+      case 'SHOVE': {
+        // a sideways bump with the shoulder, one wing out for balance
+        const k = Math.max(0, Math.sin(tt * 11));
+        inner.rotation.x = 0.3 * k;
+        inner.position.z = 0.12 * k;
+        inner.rotation.z = -0.1 * k;
+        wings.forEach((w, i) => { if (i === 1) w.rotation.set(0.5 * k, 0.6 * k, WZ); });
+        head.rotation.x = -0.2 * k;
+        break;
+      }
+      case 'BONKED': {
+        // just got pranked: feathers puffed up, head jerked back, eyes squeezed shut, wobbling
+        inner.scale.set(1.16, 1.1, 1.16);
+        inner.rotation.z = 0.16 + Math.sin(tt * 22) * 0.07;
+        head.rotation.z = 0.4;
+        head.position.x = hx - 0.06;
+        wingPose(0.45, Math.abs(Math.sin(tt * 18)) * 0.3);
+        if (head.userData.crest) head.userData.crest.rotation.z = -0.7;
+        eyeY = 0.12;
+        break;
+      }
+      case 'SQUISHED': {
+        // someone is sitting on my head
+        inner.scale.set(1.14, 0.88, 1.14);
+        head.position.y = hy - 0.1;
+        head.rotation.z = -0.15 + Math.sin(tt * 3) * 0.05;
+        if (head.userData.crest) head.userData.crest.rotation.z = 0.8;
+        eyeY = 0.45;
+        break;
+      }
       default:
         eyeY = idle(tt, look, eyeY);
     }
     eyes.forEach((e) => e.scale.set(1, eyeY, 1));
   }
 
-  return { group, pose, size: S.size };
+  return { group, pose, size: S.size, colors: c };
 }
 
 export { UP, shade, toLinear };

@@ -5,6 +5,7 @@ import com.anglog.realtime.protocol.Messages.Look;
 import com.anglog.realtime.protocol.Messages.PlayerView;
 import com.anglog.realtime.protocol.Pose;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,13 +20,18 @@ public final class Channel {
 
     /** What changed since the last tick. */
     public record Batch(int online, List<PlayerView> joined, List<Object[]> moved, List<Integer> left,
-                        List<LookChange> looks, List<Object[]> emotes, List<int[]> says) {
+                        List<LookChange> looks, List<Object[]> emotes, List<int[]> says,
+                        List<int[]> pranks, List<int[]> answers, List<int[]> calms) {
     }
+
+    /** What happened to a prank. Everything but OK is told only to the prankster. */
+    public enum PrankResult { OK, GONE, CALM, FAR, WAIT, BLOCKED }
 
     private static final class Player {
         final int pid;
         Look look;
         Pose pose;
+        boolean calm;
 
         Player(int pid, Look look, Pose pose) {
             this.pid = pid;
@@ -34,7 +40,7 @@ public final class Channel {
         }
 
         PlayerView view() {
-            return new PlayerView(pid, look, pose.x(), pose.y(), pose.z(), pose.ry(), pose.m());
+            return new PlayerView(pid, look, pose.x(), pose.y(), pose.z(), pose.ry(), pose.m(), calm);
         }
     }
 
@@ -48,6 +54,15 @@ public final class Channel {
     private final List<Integer> left = new ArrayList<>();
     private final List<Object[]> emotes = new ArrayList<>();
     private final List<int[]> says = new ArrayList<>();
+    private final List<int[]> pranks = new ArrayList<>();
+    private final List<int[]> answers = new ArrayList<>();
+    private final List<int[]> calms = new ArrayList<>();
+
+    // per (prankster, target) pair; cleared when either leaves, so at most capacity squared entries
+    private final Map<Long, Long> lastPrankAt = new HashMap<>();
+    private final Map<Long, Long> answerUntil = new HashMap<>();
+    private final Map<Long, Integer> ignoresInARow = new HashMap<>();
+    private final Map<Long, Long> blockedUntil = new HashMap<>();
 
     public Channel(int no) {
         this.no = no;
@@ -59,8 +74,14 @@ public final class Channel {
 
     /** @return the new player's id; ids are never reused within a channel */
     public synchronized int join(Look look, Pose pose) {
+        return join(look, pose, false);
+    }
+
+    public synchronized int join(Look look, Pose pose, boolean calm) {
         int pid = nextPid++;
-        players.put(pid, new Player(pid, look, pose));
+        Player p = new Player(pid, look, pose);
+        p.calm = calm;
+        players.put(pid, p);
         joined.add(pid);
         return pid;
     }
@@ -100,6 +121,91 @@ public final class Channel {
         }
     }
 
+    // ---------------------------------------------------------------- pranks
+
+    private static long pair(int from, int to) {
+        return ((long) from << 32) | (to & 0xffffffffL);
+    }
+
+    /**
+     * One bird pranks another. The server checks what the browsers cannot be trusted with:
+     * both are here, the target takes pranks, they are close, not too often, and not after being ignored.
+     */
+    public synchronized PrankResult prank(int from, int to, int kind, long now, PrankRules rules) {
+        Player a = players.get(from);
+        Player b = players.get(to);
+        if (from == to || a == null || b == null) {
+            return PrankResult.GONE;
+        }
+        if (b.calm) {
+            return PrankResult.CALM;
+        }
+        long key = pair(from, to);
+        Long blocked = blockedUntil.get(key);
+        if (blocked != null && blocked > now) {
+            return PrankResult.BLOCKED;
+        }
+        double d = Math.sqrt(Math.pow(a.pose.x() - b.pose.x(), 2) + Math.pow(a.pose.y() - b.pose.y(), 2)
+                + Math.pow(a.pose.z() - b.pose.z(), 2));
+        if (d > rules.range()) {
+            return PrankResult.FAR;
+        }
+        Long last = lastPrankAt.get(key);
+        if (last != null && now - last < rules.sameTargetGapMs()) {
+            return PrankResult.WAIT;
+        }
+        lastPrankAt.put(key, now);
+        answerUntil.put(key, now + rules.answerWindowMs());
+        pranks.add(new int[] {from, to, kind});
+        return PrankResult.OK;
+    }
+
+    /**
+     * The target ("from" here) answers the prank "to" played on them: back, make up, or ignore.
+     * Answering back is a prank in return, so the other bird may answer that one in turn.
+     * @return false when there is no prank waiting for an answer
+     */
+    public synchronized boolean answer(int from, int to, int answer, long now, PrankRules rules) {
+        long key = pair(to, from);
+        Long until = answerUntil.remove(key);
+        if (until == null || until < now || !players.containsKey(from) || !players.containsKey(to)) {
+            return false;
+        }
+        if (answer == PrankRules.ANSWER_IGNORE) {
+            int n = ignoresInARow.merge(key, 1, Integer::sum);
+            if (n >= rules.ignoreLimit()) {
+                blockedUntil.put(key, now + rules.blockMs());
+                ignoresInARow.remove(key);
+            }
+        } else {
+            ignoresInARow.remove(key);
+        }
+        if (answer == PrankRules.ANSWER_BACK) {
+            long back = pair(from, to);
+            answerUntil.put(back, now + rules.answerWindowMs());
+            lastPrankAt.put(back, now);
+        }
+        answers.add(new int[] {from, to, answer});
+        return true;
+    }
+
+    /** Whether this bird takes pranks. Pranks already played on it can still be answered. */
+    public synchronized void calm(int pid, boolean on) {
+        Player p = players.get(pid);
+        if (p == null || p.calm == on) {
+            return;
+        }
+        p.calm = on;
+        if (!joined.contains(pid)) {
+            calms.add(new int[] {pid, on ? 1 : 0});
+        }
+    }
+
+    public synchronized boolean isCalm(int pid) {
+        Player p = players.get(pid);
+        return p != null && p.calm;
+    }
+
     public synchronized void leave(int pid) {
         if (players.remove(pid) == null) {
             return;
@@ -109,6 +215,14 @@ public final class Channel {
         looked.remove(pid);
         emotes.removeIf(e -> ((Integer) e[0]) == pid);
         says.removeIf(s -> s[0] == pid);
+        pranks.removeIf(e -> e[0] == pid);
+        answers.removeIf(e -> e[0] == pid);
+        calms.removeIf(e -> e[0] == pid);
+        java.util.function.Predicate<Long> involves = k -> (int) (k >> 32) == pid || (int) (long) k == pid;
+        lastPrankAt.keySet().removeIf(involves);
+        answerUntil.keySet().removeIf(involves);
+        ignoresInARow.keySet().removeIf(involves);
+        blockedUntil.keySet().removeIf(involves);
         // always announced: a welcome sent this tick may already list them
         left.add(pid);
     }
@@ -130,7 +244,8 @@ public final class Channel {
 
     /** @return the changes since the last call, or null when nothing changed */
     public synchronized Batch drain() {
-        if (joined.isEmpty() && moved.isEmpty() && looked.isEmpty() && left.isEmpty() && emotes.isEmpty() && says.isEmpty()) {
+        if (joined.isEmpty() && moved.isEmpty() && looked.isEmpty() && left.isEmpty() && emotes.isEmpty() && says.isEmpty()
+                && pranks.isEmpty() && answers.isEmpty() && calms.isEmpty()) {
             return null;
         }
         List<PlayerView> j = new ArrayList<>(joined.size());
@@ -146,13 +261,17 @@ public final class Channel {
         for (int pid : looked) {
             l.add(new LookChange(pid, players.get(pid).look));
         }
-        Batch batch = new Batch(players.size(), j, m, List.copyOf(left), l, List.copyOf(emotes), List.copyOf(says));
+        Batch batch = new Batch(players.size(), j, m, List.copyOf(left), l, List.copyOf(emotes), List.copyOf(says),
+                List.copyOf(pranks), List.copyOf(answers), List.copyOf(calms));
         joined.clear();
         moved.clear();
         looked.clear();
         left.clear();
         emotes.clear();
         says.clear();
+        pranks.clear();
+        answers.clear();
+        calms.clear();
         return batch;
     }
 }

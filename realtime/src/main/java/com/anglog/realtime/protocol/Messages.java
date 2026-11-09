@@ -20,8 +20,8 @@ public final class Messages {
     public record Colors(String face, String head, String body, String wing, String tail) {
     }
 
-    /** Someone in the park: id within the channel, look, position, yaw and pose code. */
-    public record PlayerView(int pid, Look look, double x, double y, double z, double ry, int m) {
+    /** Someone in the park: id within the channel, look, position, yaw, pose code, and whether they take pranks. */
+    public record PlayerView(int pid, Look look, double x, double y, double z, double ry, int m, boolean calm) {
     }
 
     public record Welcome(String type, int v, int pid, int channel, int capacity, int online,
@@ -38,14 +38,25 @@ public final class Messages {
 
     /**
      * Everything that changed in one channel during one tick.
-     * moved: [pid, x, y, z, ry, m], emotes: [pid, id], says: [pid, phrase index]. Empty lists are left out.
+     * moved: [pid, x, y, z, ry, m], emotes: [pid, id], says: [pid, phrase index],
+     * pranks: [from, to, kind], answers: [from, to, answer] (from answers the prank "to" played on them),
+     * calms: [pid, 1 or 0]. Empty lists are left out.
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public record Presence(String type, int channel, int online, List<PlayerView> joined, List<Object[]> moved,
-                           List<Integer> left, List<LookChange> looks, List<Object[]> emotes, List<int[]> says) {
+                           List<Integer> left, List<LookChange> looks, List<Object[]> emotes, List<int[]> says,
+                           List<int[]> pranks, List<int[]> answers, List<int[]> calms) {
         public static Presence of(int channel, int online, List<PlayerView> joined, List<Object[]> moved,
-                                  List<Integer> left, List<LookChange> looks, List<Object[]> emotes, List<int[]> says) {
-            return new Presence("presence", channel, online, joined, moved, left, looks, emotes, says);
+                                  List<Integer> left, List<LookChange> looks, List<Object[]> emotes, List<int[]> says,
+                                  List<int[]> pranks, List<int[]> answers, List<int[]> calms) {
+            return new Presence("presence", channel, online, joined, moved, left, looks, emotes, says, pranks, answers, calms);
+        }
+    }
+
+    /** Only to the bird who tried a prank the server turned down. why: calm, far, wait, blocked, gone. */
+    public record PrankNo(String type, int to, String why) {
+        public static PrankNo of(int to, String why) {
+            return new PrankNo("prankNo", to, why);
         }
     }
 

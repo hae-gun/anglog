@@ -20,6 +20,8 @@ public final class ClientSession {
     private long lastLookAt;
     private long lastSayAt;
     private long lastEmoteAt;
+    private long lastPrankAt;
+    private long lastCalmAt;
 
     public ClientSession(WebSocketSession socket, String remoteIp, long now) {
         this.socket = socket;
@@ -69,6 +71,22 @@ public final class ClientSession {
             return false;
         }
         lastEmoteAt = now;
+        return true;
+    }
+
+    public synchronized boolean acceptPrank(long now, long gapMs) {
+        if (lastPrankAt != 0 && now - lastPrankAt < gapMs) {
+            return false;
+        }
+        lastPrankAt = now;
+        return true;
+    }
+
+    public synchronized boolean acceptCalm(long now, long gapMs) {
+        if (lastCalmAt != 0 && now - lastCalmAt < gapMs) {
+            return false;
+        }
+        lastCalmAt = now;
         return true;
     }
 

@@ -29,9 +29,13 @@ public class Channels {
     }
 
     public synchronized Joined enter(Look look, Pose pose) {
+        return enter(look, pose, false);
+    }
+
+    public synchronized Joined enter(Look look, Pose pose, boolean calm) {
         for (Channel c : open.values()) {
             if (c.size() < capacity) {
-                return new Joined(c, c.join(look, pose));
+                return new Joined(c, c.join(look, pose, calm));
             }
         }
         int no = 1;
@@ -40,7 +44,7 @@ public class Channels {
         }
         Channel c = new Channel(no);
         open.put(no, c);
-        return new Joined(c, c.join(look, pose));
+        return new Joined(c, c.join(look, pose, calm));
     }
 
     public synchronized Channel get(int no) {
