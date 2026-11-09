@@ -154,6 +154,11 @@ const SHAPES = {
     size: 1.1, body: [0.47, 0.38, 0.36], tilt: 0.64, head: [0.33, 0.96], headR: 0.96, beak: ['#46413D', 1.0],
     tail: { lens: [1.0, 0.9, 0.78], pair: false, w: 0.04, fan: 0.13, down: 0.42 }, wing: 1.12, flight: '#3B66B0',
   },
+  // Indian ringneck: slim, upright, red beak, and a very long thin tail (more than half its 40 cm)
+  RINGNECK: {
+    size: 1.15, body: [0.43, 0.34, 0.32], tilt: 0.78, head: [0.3, 1.02], headR: 0.92, beak: ['#D8332E', 1.15], lowerBeak: '#3A2B29',
+    tail: { lens: [1.75, 1.2, 0.86], pair: true, w: 0.022, fan: 0.07, down: 0.52 }, wing: 1.15,
+  },
   OTHER: {
     size: 1, body: [0.47, 0.4, 0.39], tilt: 0.55, head: [0.33, 0.9], headR: 1, beak: ['#F3E3C8', 1],
     tail: { lens: [0.55, 0.5, 0.45], pair: false, w: 0.045, fan: 0.16, down: 0.35 }, wing: 1,
@@ -193,7 +198,7 @@ function compact(obj) {
  * Builds a bird. Returns { group, pose(mood, t), size }.
  * group is for the caller to place, turn and scale (1 = normal); the species size sits inside it.
  */
-export function makeBird(colors, species) {
+export function makeBird(colors, species, opts = {}) {
   const c = colors;
   const S = SHAPES[species] || SHAPES.OTHER;
   const wingC = c.wing;
@@ -291,7 +296,7 @@ export function makeBird(colors, species) {
   }
 
   // feet: short feathered legs, two toes forward and two back, gripping
-  const FOOT = species === 'COCKATIEL' || species === 'QUAKER' || species === 'GREEN_CHEEKED_CONURE' ? '#8F8783' : '#C9A9A0';
+  const FOOT = species === 'COCKATIEL' || species === 'QUAKER' || species === 'GREEN_CHEEKED_CONURE' || species === 'RINGNECK' ? '#8F8783' : '#C9A9A0';
   // each leg is its own group, so a sleeping bird can pull one up into its belly feathers
   const legs = [-1, 1].map((s) => {
     const lg = new THREE.Group();
@@ -351,6 +356,26 @@ export function makeBird(colors, species) {
     blob(head, '#6F8FD8', 0.36, 0.12, 0, 0.06, 0.04, 0.075);
   } else if (species === 'LOVEBIRD' || species === 'OTHER') {
     [-1, 1].forEach((s) => blob(head, '#FF9C9C', 0.2, -0.02, 0.27 * s, 0.075, 0.045, 0.03));
+  } else if (species === 'RINGNECK') {
+    // a soft wash over the nape (blue-lavender on a green bird; the head color from the customizer)
+    blob(head, c.head, -0.13, 0.08, 0, 0.25, 0.25, 0.31, 0.3);
+    if (opts.ring !== false) {
+      // adult males: a black chin that runs into a thin black collar around the neck,
+      // with a rose band just above it around the back. The collar dips at the throat.
+      blob(head, '#1E1A1A', 0.24, -0.2, 0, 0.09, 0.05, 0.12, -0.5);
+      const neck = new THREE.Group();
+      neck.position.set(-0.09, -0.21, 0);
+      neck.rotation.z = -0.38;
+      head.add(neck);
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(0.245, 0.03, 6, 32), toon('#1E1A1A'));
+      collar.rotation.set(Math.PI / 2, 0, 0);
+      neck.add(collar);
+      const arc = Math.PI * 1.1;
+      const rose = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.026, 6, 28, arc), toon(opts.ringColor || '#F08FA8'));
+      rose.position.y = 0.05;
+      rose.rotation.set(Math.PI / 2, 0, Math.PI - arc / 2);
+      neck.add(rose);
+    }
   }
 
   // hooked beak: the upper half curls down over a small lower half
@@ -358,7 +383,7 @@ export function makeBird(colors, species) {
   const beak = new THREE.Group();
   beak.position.set(0.35 + 0.02 * beakK, 0.04, 0);
   head.add(beak);
-  blob(beak, shade(beakC, 0.86), 0.03, -0.075 * beakK, 0, 0.07 * beakK, 0.05 * beakK, 0.065 * beakK, -0.3, LW * 0.7, SPH_LO);
+  blob(beak, S.lowerBeak || shade(beakC, 0.86), 0.03, -0.075 * beakK, 0, 0.07 * beakK, 0.05 * beakK, 0.065 * beakK, -0.3, LW * 0.7, SPH_LO);
   blob(beak, beakC, 0.02, 0, 0, 0.13 * beakK, 0.1 * beakK, 0.09 * beakK, -0.35, LW * 0.7, BEAK);
   if (species === 'BUDGIE') {
     // budgies' beaks sit half inside the face feathers
@@ -378,6 +403,12 @@ export function makeBird(colors, species) {
     hl2.position.set(-0.02, -0.03, 0.04 * s);
     hl2.scale.setScalar(0.011);
     eg.add(hl2);
+    if (species === 'RINGNECK') {
+      // thin orange-red ring around the eye
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.014, 6, 16), toon('#E26A3A'));
+      ring.position.set(0.24, 0.12, 0.27 * s + 0.012 * s);
+      head.add(ring);
+    }
     if (species === 'GREEN_CHEEKED_CONURE') {
       // bare white skin around the eye, outside the blinking group
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.028, 6, 16), toon('#F4F1EA'));
