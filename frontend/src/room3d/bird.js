@@ -156,7 +156,7 @@ const SHAPES = {
   },
   // Indian ringneck: slim, upright, red beak, and a very long thin tail (more than half its 40 cm)
   RINGNECK: {
-    size: 1.15, body: [0.43, 0.34, 0.32], tilt: 0.78, head: [0.3, 1.02], headR: 0.92, beak: ['#D8332E', 1.15], lowerBeak: '#3A2B29',
+    size: 1.15, body: [0.43, 0.34, 0.32], tilt: 0.78, head: [0.32, 1.0], headR: 0.86, headShape: [1.13, 0.88, 0.86], beak: ['#D8332E', 1.38], lowerBeak: '#3A2B29',
     tail: { lens: [1.75, 1.2, 0.86], pair: true, w: 0.022, fan: 0.07, down: 0.52 }, wing: 1.15,
   },
   OTHER: {
@@ -317,8 +317,11 @@ export function makeBird(colors, species, opts = {}) {
 
   // head
   const head = new THREE.Group();
+  // some species have a longer, flatter head than the round default (front to back, height, width)
+  const HS = S.headShape || [1, 1, 1];
+  const headScale = (k) => head.scale.set(k * HS[0], k * HS[1], k * HS[2]);
   head.position.set(hx, hy, 0);
-  head.scale.setScalar(S.headR);
+  headScale(S.headR);
   inner.add(head);
   blob(head, c.body, -0.05, 0.12, 0, 0.33, 0.33, 0.33, 0, LW);
   blob(head, c.face, 0.07, 0.06, 0, 0.32, 0.3, 0.33, 0, LW);
@@ -329,7 +332,8 @@ export function makeBird(colors, species, opts = {}) {
     // the grey runs from the forehead down the throat
     blob(head, c.head, 0.16, 0.2, 0, 0.22, 0.17, 0.26);
     blob(head, c.face, 0.17, -0.17, 0, 0.2, 0.14, 0.22);
-  } else {
+  } else if (species !== 'RINGNECK') {
+    // ringnecks wear the head color on the nape instead (below)
     blob(head, c.head, 0.18, 0.24, 0, 0.2, 0.15, 0.24);
   }
 
@@ -458,7 +462,7 @@ export function makeBird(colors, species, opts = {}) {
   function beg(e, s, tt) {
     head.rotation.z = -0.75 * e;
     head.rotation.x = s * 0.3 * e;
-    head.scale.setScalar(S.headR * (1 + 0.07 * e));
+    headScale(S.headR * (1 + 0.07 * e));
     inner.rotation.x = Math.sin(tt * 3) * 0.05 * e;
     if (head.userData.crest) head.userData.crest.rotation.z = 0.4 * e;
     return e > 0.5 ? 0.35 : 1;
@@ -525,7 +529,7 @@ export function makeBird(colors, species, opts = {}) {
    */
   function pose(mood, t, look) {
     const tt = t + phase;
-    head.scale.setScalar(S.headR);
+    headScale(S.headR);
     inner.position.set(0, 0, 0);
     inner.rotation.set(0, 0, 0);
     inner.scale.set(1, 1, 1);
@@ -631,7 +635,7 @@ export function makeBird(colors, species, opts = {}) {
         // being scratched: head offered sideways, eyes shut with pleasure, feathers fluffed
         head.rotation.z = -0.5;
         head.rotation.x = 0.35 + Math.sin(tt * 7) * 0.12;
-        head.scale.setScalar(S.headR * 1.08);
+        headScale(S.headR * 1.08);
         inner.scale.set(1.06, 1.04, 1.06);
         inner.rotation.x = Math.sin(tt * 5) * 0.06;
         if (head.userData.crest) head.userData.crest.rotation.z = 0.35;
