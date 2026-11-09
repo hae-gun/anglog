@@ -16,6 +16,8 @@ public final class ClientSession {
     private volatile int channelNo;
     private volatile int pid;
     private volatile long lastPingAt;
+    private volatile long ownerId;
+    private volatile String home;
     private long lastMoveAt;
     private long lastLookAt;
     private long lastSayAt;
@@ -88,6 +90,20 @@ public final class ClientSession {
         }
         lastCalmAt = now;
         return true;
+    }
+
+    /** A verified owner (park token): their user id and handle. 0 and null for guests. */
+    public void owner(long userId, String handle) {
+        this.ownerId = userId;
+        this.home = handle;
+    }
+
+    public long ownerId() {
+        return ownerId;
+    }
+
+    public String home() {
+        return home;
     }
 
     public WebSocketSession socket() {

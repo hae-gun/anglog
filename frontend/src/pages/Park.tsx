@@ -6,7 +6,7 @@ import { Joystick } from '../components/Joystick';
 import { ParrotForm } from '../components/ParrotForm';
 import { GuestBird, loadGuestBird, saveGuestBird } from '../lib/guestBird';
 import { timeAgo } from '../lib/image';
-import { connectPark, NetClient, NetLook, NetPlayer, NetState, NetStatus, PrankNo, realtimeUrl } from '../lib/parkNet';
+import { connectPark, NetClient, NetLook, NetPlayer, NetSpot, NetState, NetStatus, PrankNo, realtimeUrl } from '../lib/parkNet';
 import { PHRASES } from '../lib/phrases';
 import { isMuted, setMuted } from '../lib/sound';
 import { mountPark } from '../room3d/park.js';
@@ -31,6 +31,7 @@ interface Controller {
   lookRemote(pid: number, look: NetLook): void;
   removeRemote(pid: number): void;
   clearRemotes(): void;
+  placeAt(spot: NetSpot): boolean;
   emoteRemote(pid: number, id: string): void;
   sayRemote(pid: number, text: string): void;
   prankTarget(): (Who & { calm: boolean }) | null;
@@ -129,6 +130,8 @@ export function ParkPage() {
   const [broken, setBroken] = useState(false);
   const [flying, setFlying] = useState(false);
   const [status, setStatus] = useState<NetStatus | null>(null);
+  // bumped by "여기서 다시 놀기" after another tab or device took my bird
+  const [netRound, setNetRound] = useState(0);
   const [online, setOnline] = useState(1);
   const [invite, setInvite] = useState(false);
   const [birdId, setBirdId] = useState<number | null>(() => Number(readKey(BIRD_KEY)) || null);
@@ -229,10 +232,17 @@ export function ParkPage() {
     if (!url || loading) return;
     const map = others.current;
     const client = connectPark(url, lookRef.current, () => ctl.current?.state() ?? null, {
-      status: setStatus,
-      welcome(players, n) {
+      status(st) {
+        setStatus(st);
+        if (st === 'replaced') {
+          map.clear();
+          ctl.current?.clearRemotes();
+        }
+      },
+      welcome(players, n, spot) {
         ctl.current?.clearRemotes();
         map.clear();
+        if (spot) ctl.current?.placeAt(spot);
         players.forEach((p) => { map.set(p.pid, p); ctl.current?.addRemote(p.pid, p.look, p); });
         setOnline(n);
       },
@@ -265,7 +275,11 @@ export function ParkPage() {
       prankNo: (_to, why) => setToast(PRANK_NO[why] ?? '지금은 장난칠 수 없어요.'),
       say: (pid, n) => { if (PHRASES[n]) ctl.current?.sayRemote(pid, PHRASES[n]); },
       online: setOnline,
-    }, calmRef.current);
+    }, calmRef.current, async () => {
+      // a logged-in owner: one bird per account in the park, back where it last was
+      if (!me) return null;
+      return (await api.parkToken()).token;
+    });
     net.current = client;
     return () => {
       client.close();
@@ -273,7 +287,8 @@ export function ParkPage() {
       map.clear();
       ctl.current?.clearRemotes();
     };
-  }, [url, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, loading, me?.id, netRound]);
 
   // when I dress up again, others see the new look without reconnecting
   useEffect(() => {
@@ -389,7 +404,7 @@ export function ParkPage() {
         {status && (
           <span className={`play-chip park-online ${status}`} role="status">
             <span className="dot" aria-hidden="true" />
-            {status === 'online' ? `${online}마리 노는 중` : status === 'connecting' ? '연결 중' : '혼자 노는 중'}
+            {status === 'online' ? `${online}마리 노는 중` : status === 'connecting' ? '연결 중' : status === 'replaced' ? '다른 곳에서 노는 중' : '혼자 노는 중'}
           </span>
         )}
         {tudak && <span className="play-chip park-tudak" title="오늘 가장 많이 투닥거린 앵무">투닥 친구 {tudak.name} {tudak.n}번</span>}
@@ -428,6 +443,17 @@ export function ParkPage() {
             <button className="btn small ghost" onClick={() => answerPrank(2)}>무시하고 날아가기</button>
           </div>
           <span className="park-prank-timer" style={{ animationDuration: `${ANSWER_MS}ms` }} key={`${pranked.id}-${pranked.kind}-${pranked.back}`} aria-hidden="true" />
+        </div>
+      )}
+
+      {status === 'replaced' && (
+        <div className="park-invite" role="dialog" aria-label="다른 곳에서 앵파크에 들어왔어요">
+          <b>다른 곳에서 앵파크에 들어왔어요</b>
+          <p>같은 계정의 앵무는 공원에 한 마리만 있을 수 있어서, 여기 있던 앵무는 그쪽으로 옮겨 갔어요. 여기서 다시 놀면 그 자리에서 이어서 나와요.</p>
+          <div className="row">
+            <button className="btn small primary" onClick={() => setNetRound((n) => n + 1)}>여기서 다시 놀기</button>
+            <Link className="btn small" to="/feed">앵로그로 가기</Link>
+          </div>
         </div>
       )}
 

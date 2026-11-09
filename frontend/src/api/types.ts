@@ -129,6 +129,8 @@ export interface Api {
   signUp(handle: string, nickname: string, password: string): Promise<UserSummary>;
   login(handle: string, password: string): Promise<UserSummary>;
   logout(): Promise<void>;
+  /** A short-lived token that tells 앵파크 this bird is mine (one bird per account there). */
+  parkToken(): Promise<{ token: string; expiresInSec: number }>;
 
   myParrots(): Promise<Parrot[]>;
   createParrot(input: ParrotInput): Promise<Parrot>;

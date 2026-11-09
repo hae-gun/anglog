@@ -14,6 +14,18 @@ public class SessionRegistry {
     private final Map<String, ClientSession> byId = new ConcurrentHashMap<>();
     private final Map<Integer, Set<ClientSession>> byChannel = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> perIp = new ConcurrentHashMap<>();
+    private final Map<Long, ClientSession> byOwner = new ConcurrentHashMap<>();
+
+    /** The owner's bird is now this tab. @return the tab it was before, if any */
+    public ClientSession claimOwner(long userId, ClientSession session) {
+        ClientSession before = byOwner.put(userId, session);
+        return before == session ? null : before;
+    }
+
+    /** Only when this tab still holds the owner (a newer tab may have taken over already). */
+    public void releaseOwner(long userId, ClientSession session) {
+        byOwner.remove(userId, session);
+    }
 
     /** @return connections from the same IP including this one */
     public int add(ClientSession session) {

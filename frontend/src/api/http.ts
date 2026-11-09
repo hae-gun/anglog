@@ -63,6 +63,7 @@ export const httpApi: Api = {
   signUp: (handle, nickname, password) => request('POST', '/api/auth/signup', { handle, nickname, password }),
   login: (handle, password) => request('POST', '/api/auth/login', { handle, password }),
   logout: () => request('POST', '/api/auth/logout'),
+  parkToken: () => request<{ token: string; expiresInSec: number }>('POST', '/api/park/token'),
 
   myParrots: () => request<Parrot[]>('GET', '/api/parrots/mine'),
   createParrot: (input: ParrotInput) => request('POST', '/api/parrots', input),

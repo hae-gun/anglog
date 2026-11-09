@@ -238,6 +238,12 @@ public final class Channel {
         return list;
     }
 
+    /** Where this bird is now, or null. */
+    public synchronized Pose pose(int pid) {
+        Player p = players.get(pid);
+        return p == null ? null : p.pose;
+    }
+
     public synchronized int size() {
         return players.size();
     }

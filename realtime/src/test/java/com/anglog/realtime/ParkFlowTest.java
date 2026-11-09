@@ -3,6 +3,8 @@ package com.anglog.realtime;
 import static com.anglog.realtime.TestClient.has;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.anglog.realtime.protocol.CloseCodes;
+import com.anglog.realtime.session.ParkTokens;
 import com.anglog.realtime.session.SessionRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,7 +17,7 @@ import org.springframework.web.socket.CloseStatus;
 /** End to end over real WebSockets: two birds see each other join, move, talk and leave. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {"angpark.max-connections-per-ip=100", "angpark.say-min-gap-ms=0", "angpark.emote-min-gap-ms=0",
-                "angpark.prank-min-gap-ms=0"})
+                "angpark.prank-min-gap-ms=0", "angpark.token-secret=flow-secret"})
 class ParkFlowTest {
 
     @LocalServerPort
@@ -163,6 +165,55 @@ class ParkFlowTest {
             assertThat(a.await("error").path("code").asText()).isEqualTo("NOT_READY");
             a.send("{\"type\":\"ping\",\"t\":42}");
             assertThat(a.await("error", m -> true)).isNotNull();
+        }
+    }
+
+    private static String token(long userId, String handle) {
+        return new ParkTokens("flow-secret").issue(userId, handle, System.currentTimeMillis() / 1000 + 300);
+    }
+
+    @Test
+    void sameOwnerElsewhereReplacesTheOldBirdAtItsSpot() throws Exception {
+        try (TestClient watcher = TestClient.connect(port); TestClient first = TestClient.connect(port);
+             TestClient second = TestClient.connect(port)) {
+            watcher.hello("구경꾼");
+            JsonNode w1 = first.helloAs("머란이", token(41, "meoran"), 0, 23);
+            int pid1 = w1.path("pid").asInt();
+            assertThat(w1.path("owner").asBoolean()).isTrue();
+            assertThat(w1.has("spot")).isFalse();
+            first.send("{\"type\":\"move\",\"x\":-6.5,\"y\":1.2,\"z\":4,\"ry\":2,\"m\":0}");
+            watcher.await("presence", m -> has(m, "moved", r -> r.get(0).asInt() == pid1 && r.get(1).asDouble() == -6.5));
+
+            // the same account comes in from another tab, standing at the gate
+            JsonNode w2 = second.helloAs("머란이", token(41, "meoran"), 0, 23);
+            int pid2 = w2.path("pid").asInt();
+            assertThat(w2.path("spot").path("x").asDouble()).isEqualTo(-6.5);
+            assertThat(w2.path("spot").path("z").asDouble()).isEqualTo(4.0);
+
+            // the old tab is told and closed, and does not count as a second bird
+            first.await("replaced");
+            assertThat(first.awaitClose().getCode()).isEqualTo(CloseCodes.REPLACED.getCode());
+            watcher.await("presence", m -> has(m, "left", p -> p.asInt() == pid1));
+            watcher.await("presence", m -> has(m, "joined", p -> p.path("pid").asInt() == pid2
+                    && p.path("x").asDouble() == -6.5 && p.path("look").path("home").asText().equals("meoran")));
+        }
+    }
+
+    @Test
+    void ownerComesBackWhereTheyLeft() throws Exception {
+        try (TestClient first = TestClient.connect(port)) {
+            int pid = first.helloAs("보리", token(42, "bori"), 0, 23).path("pid").asInt();
+            first.send("{\"type\":\"move\",\"x\":3,\"y\":0,\"z\":-8,\"ry\":1,\"m\":0}");
+            Thread.sleep(400);
+        }
+        waitForCleanState();
+        try (TestClient again = TestClient.connect(port); TestClient guest = TestClient.connect(port)) {
+            JsonNode w = again.helloAs("보리", token(42, "bori"), 0, 23);
+            assertThat(w.path("spot").path("z").asDouble()).isEqualTo(-8.0);
+            // a guest cannot claim a house by typing it, nor with a broken token
+            JsonNode g = guest.helloAs("가짜", "v1.bm9wZQ.AAAA", 0, 23);
+            assertThat(g.path("owner").asBoolean()).isFalse();
+            assertThat(has(g, "players", p -> p.path("look").path("home").asText("").equals("bori"))).isTrue();
         }
     }
 }

@@ -27,11 +27,14 @@ export interface NetPlayer extends NetState {
 }
 /** Why the server turned my prank down. */
 export type PrankNo = 'calm' | 'far' | 'wait' | 'blocked' | 'gone';
-export type NetStatus = 'connecting' | 'online' | 'offline';
+/** replaced: the same account came into the park from another tab or device, so this one left. */
+export type NetStatus = 'connecting' | 'online' | 'offline' | 'replaced';
+/** Where the server put my bird back (my last spot), when it did. */
+export interface NetSpot { x: number; y: number; z: number; ry: number }
 
 export interface NetHandlers {
   status(s: NetStatus): void;
-  welcome(players: NetPlayer[], online: number): void;
+  welcome(players: NetPlayer[], online: number, spot: NetSpot | null): void;
   joined(p: NetPlayer): void;
   moved(pid: number, s: NetState): void;
   left(pid: number): void;
@@ -67,7 +70,12 @@ export function realtimeUrl(): string | null {
 
 const round = (v: number) => Math.round(v * 100) / 100;
 
-export function connectPark(url: string, firstLook: NetLook, getState: () => NetState | null, on: NetHandlers, firstCalm = false): NetClient {
+/**
+ * getToken: a park token for a logged-in owner (POST /api/park/token), asked again before every
+ * hello. The server keeps one bird per account and puts it back where it last was.
+ */
+export function connectPark(url: string, firstLook: NetLook, getState: () => NetState | null, on: NetHandlers, firstCalm = false,
+  getToken: () => Promise<string | null> = async () => null): NetClient {
   let look = firstLook;
   let calm = firstCalm;
   let ws: WebSocket | null = null;
@@ -78,13 +86,21 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
   let pingTimer = 0;
   let retryTimer = 0;
   let lastSent = '';
+  let replaced = false;
 
   const send = (msg: object) => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   };
 
-  function open() {
+  async function open() {
     on.status('connecting');
+    let token: string | null = null;
+    try {
+      token = await getToken();
+    } catch {
+      // no token: play as a guest bird this time
+    }
+    if (closedByUs) return;
     try {
       ws = new WebSocket(url);
     } catch {
@@ -93,7 +109,7 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
     }
     ws.onopen = () => {
       const s = getState() ?? { x: 0, y: 0, z: 23, ry: 0, m: 0 };
-      send({ type: 'hello', v: PROTOCOL_VERSION, look, calm, ...pos(s) });
+      send({ type: 'hello', v: PROTOCOL_VERSION, look, calm, ...(token ? { token } : {}), ...pos(s) });
     };
     ws.onmessage = (ev) => {
       let msg: any;
@@ -107,7 +123,7 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
           attempts = 0;
           me = msg.pid;
           on.status('online');
-          on.welcome((msg.players ?? []).filter((p: NetPlayer) => p.pid !== me), msg.online ?? 1);
+          on.welcome((msg.players ?? []).filter((p: NetPlayer) => p.pid !== me), msg.online ?? 1, msg.spot ?? null);
           lastSent = '';
           window.clearInterval(moveTimer);
           moveTimer = window.setInterval(sendMove, Math.max(200, msg.moveMs ?? 200));
@@ -128,6 +144,9 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
           if (typeof msg.online === 'number') on.online(msg.online);
           break;
         }
+        case 'replaced':
+          replaced = true;
+          break;
         case 'prankNo':
           on.prankNo(msg.to, msg.why);
           break;
@@ -140,6 +159,11 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
       window.clearInterval(pingTimer);
       ws = null;
       if (closedByUs) return;
+      // my bird went on in another tab or device; coming back here would push that one out again
+      if (replaced || ev.code === 4006) {
+        on.status('replaced');
+        return;
+      }
       on.status('offline');
       // a different protocol version will not get better by retrying
       if (ev.code === 4001) return;

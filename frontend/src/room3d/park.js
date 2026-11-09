@@ -2835,6 +2835,27 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       say(player, `${v.name} 차례!`, 1.6);
       playCall('chirp', 1.1, 0.8);
     },
+    /**
+     * The server remembered where my bird was (another tab or device had it, or I was here a little
+     * while ago): come out there instead of at the gate. Coming out of a house wins over this.
+     */
+    placeAt(spot) {
+      if (startAt || !spot || gone) return false;
+      const lim = PARK_R + 30;
+      const x = clamp(spot.x, -lim, lim), z = clamp(spot.z, -lim, lim);
+      const below = surfaceBelow(x, z, (spot.y || 0) + 0.3);
+      player.move = null;
+      flying = false;
+      landing = false;
+      player.pos.copy(below.p);
+      player.surface = below.surface;
+      player.rotTarget = player.b.group.rotation.y = spot.ry || 0;
+      cam.yaw = cam.yawT = yawBehind(player.b.group.rotation.y);
+      stepCamera(0, true);
+      say(player, '다시 왔어!', 1.6);
+      playCall('chirp', 1, 0.8);
+      return true;
+    },
     /** Tests only (mock builds): put the bird somewhere and turn the camera. */
     debugTeleport(x, z, yaw, pitch) {
       player.move = null;

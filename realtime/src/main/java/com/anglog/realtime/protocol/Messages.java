@@ -24,11 +24,30 @@ public final class Messages {
     public record PlayerView(int pid, Look look, double x, double y, double z, double ry, int m, boolean calm) {
     }
 
+    /**
+     * spot: where the server put this bird instead of where hello said, because the owner's bird was
+     * already there (another tab or device) or was there a little while ago. Left out otherwise.
+     * owner: whether the park token was accepted (so the house link is shown to others).
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Welcome(String type, int v, int pid, int channel, int capacity, int online,
-                          long presenceMs, long moveMs, long heartbeatMs, List<PlayerView> players) {
+                          long presenceMs, long moveMs, long heartbeatMs, List<PlayerView> players, Spot spot, boolean owner) {
         public static Welcome of(int v, int pid, int channel, int capacity, int online,
-                                 long presenceMs, long moveMs, long heartbeatMs, List<PlayerView> players) {
-            return new Welcome("welcome", v, pid, channel, capacity, online, presenceMs, moveMs, heartbeatMs, players);
+                                 long presenceMs, long moveMs, long heartbeatMs, List<PlayerView> players, Spot spot, boolean owner) {
+            return new Welcome("welcome", v, pid, channel, capacity, online, presenceMs, moveMs, heartbeatMs, players, spot, owner);
+        }
+    }
+
+    public record Spot(double x, double y, double z, double ry) {
+        public static Spot of(Pose p) {
+            return p == null ? null : new Spot(p.x(), p.y(), p.z(), p.ry());
+        }
+    }
+
+    /** Sent to a tab right before it is closed with 4006 because the same owner came in elsewhere. */
+    public record Replaced(String type) {
+        public static Replaced of() {
+            return new Replaced("replaced");
         }
     }
 

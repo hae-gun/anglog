@@ -60,6 +60,13 @@ final class TestClient implements AutoCloseable {
         return await("welcome");
     }
 
+    /** Says hello with a park token, at this spot. */
+    JsonNode helloAs(String name, String token, double x, double z) throws Exception {
+        send("{\"type\":\"hello\",\"v\":1,\"x\":" + x + ",\"y\":0,\"z\":" + z + ",\"ry\":0,\"token\":\"" + token
+                + "\",\"look\":{\"name\":\"" + name + "\",\"species\":\"LOVEBIRD\",\"colors\":{\"body\":\"#5DBB4A\"},\"home\":\"mine\"}}");
+        return await("welcome");
+    }
+
     JsonNode await(String type) throws InterruptedException {
         return await(type, m -> true);
     }

@@ -39,6 +39,7 @@ services:
       STORAGE_DIR: /data/media
       # 화면(GitHub Pages)에서 쿠키를 달고 부를 수 있는 곳은 이 주소 하나
       CORS_ALLOWED_ORIGINS: https://${DOMAIN:?infra/.env에 DOMAIN을 넣으세요}
+      PARK_TOKEN_SECRET: ${PARK_TOKEN_SECRET:?infra/.env에 PARK_TOKEN_SECRET을 넣으세요}
     volumes:
       - media:/data/media
     # 힙은 이 값의 75% (Dockerfile)
@@ -52,6 +53,7 @@ services:
     build: ../realtime
     environment:
       ANGPARK_ALLOWED_ORIGINS: https://${DOMAIN}
+      PARK_TOKEN_SECRET: ${PARK_TOKEN_SECRET:?infra/.env에 PARK_TOKEN_SECRET을 넣으세요}
       # 이름 금칙어 목록(한 줄에 하나). 없으면 거르지 않는다. 파일은 git에 넣지 않는다
       ANGPARK_BLOCKED_WORDS_FILE: /data/blocked-words.txt
     volumes:

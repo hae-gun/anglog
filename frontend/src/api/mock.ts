@@ -203,6 +203,8 @@ export const mockApi: Api = {
     return wait(u);
   },
   async logout() { meId = null; return wait(undefined); },
+  // the mock has no realtime server; any string will do
+  async parkToken() { if (meId == null) throw new Error('로그인이 필요해요.'); return wait({ token: `mock.${meId}`, expiresInSec: 300 }); },
 
   async myParrots() { const me = requireMe(); return wait(parrots.filter((p) => p.ownerId === me).map(strip)); },
   async createParrot(input: ParrotInput) {

@@ -45,3 +45,7 @@ angpark:
   prank-block-ms: 60000
   # optional: a file with one blocked word per line, kept out of git
   blocked-words-file: ${ANGPARK_BLOCKED_WORDS_FILE:}
+  # shared with the 앵로그 API (PARK_TOKEN_SECRET): owners' birds, one per account, house links
+  token-secret: ${PARK_TOKEN_SECRET:local-dev-park-secret}
+  # how long an owner's last spot is kept, so the bird comes back there
+  spot-memory-ms: 1800000

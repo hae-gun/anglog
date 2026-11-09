@@ -11,9 +11,13 @@ import com.anglog.realtime.protocol.Messages.ErrorMessage;
 import com.anglog.realtime.protocol.Messages.Look;
 import com.anglog.realtime.protocol.Messages.Pong;
 import com.anglog.realtime.protocol.Messages.PrankNo;
+import com.anglog.realtime.protocol.Messages.Replaced;
+import com.anglog.realtime.protocol.Messages.Spot;
 import com.anglog.realtime.protocol.Messages.Welcome;
 import com.anglog.realtime.protocol.Pose;
 import com.anglog.realtime.session.ClientSession;
+import com.anglog.realtime.session.LastSpots;
+import com.anglog.realtime.session.ParkTokens;
 import com.anglog.realtime.session.SessionRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,6 +55,8 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
     private final MessageSender sender;
     private final ObjectMapper mapper;
     private final PrankRules prankRules;
+    private final ParkTokens tokens;
+    private final LastSpots spots;
 
     public ParkWebSocketHandler(ParkProperties props, SessionRegistry registry, Channels channels, LookRules looks,
                                 MessageSender sender, ObjectMapper mapper) {
@@ -61,6 +67,11 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         this.sender = sender;
         this.mapper = mapper;
         this.prankRules = PrankRules.from(props);
+        this.tokens = new ParkTokens(props.tokenSecret());
+        this.spots = new LastSpots(props.spotMemoryMs());
+        if (!tokens.enabled()) {
+            log.warn("angpark.token-secret is empty: every bird is a guest and house links are off");
+        }
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -78,6 +89,11 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession raw, CloseStatus status) {
         ClientSession session = registry.remove(raw.getId());
         if (session != null && session.isReady()) {
+            if (session.ownerId() > 0) {
+                Channel channel = channels.get(session.channelNo());
+                spots.remember(session.ownerId(), channel == null ? null : channel.pose(session.pid()), now());
+                registry.releaseOwner(session.ownerId(), session);
+            }
             channels.leave(session.channelNo(), session.pid());
         }
     }
@@ -138,20 +154,43 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
             sender.close(session, CloseCodes.VERSION_MISMATCH);
             return;
         }
-        Look look = looks.normalize(msg.get("look"));
+        long now = now();
         Pose pose = Pose.from(msg, props.worldLimit(), props.heightLimit());
         if (pose == null) {
             pose = new Pose(0, 0, 23, 0, 0); // the ginkgo gate
         }
+        // only a verified owner gets a house link; a home typed into hello is dropped
+        ParkTokens.Owner owner = tokens.verify(msg.path("token").asText(null), now);
+        Pose spot = null;
+        if (owner != null) {
+            session.owner(owner.userId(), owner.handle());
+            ClientSession before = registry.claimOwner(owner.userId(), session);
+            if (before != null && before.isReady()) {
+                // the same owner in another tab or device: that bird leaves the park, and this one comes out where it was
+                Channel old = channels.get(before.channelNo());
+                spot = old == null ? null : old.pose(before.pid());
+                sender.send(before, Replaced.of());
+                sender.close(before, CloseCodes.REPLACED);
+            }
+            if (spot == null) {
+                spot = spots.take(owner.userId(), now);
+            }
+            if (spot != null) {
+                pose = new Pose(spot.x(), spot.y(), spot.z(), spot.ry(), 0);
+            }
+        }
+        Look raw = looks.normalize(msg.get("look"));
+        // the house link shows only when the browser asks for it (a bird of my own) and the token proves whose it is
+        Look look = new Look(raw.name(), raw.species(), raw.colors(), owner != null && raw.home() != null ? owner.handle() : null);
         Channels.Joined joined = channels.enter(look, pose, msg.path("calm").asBoolean(false));
         Channel channel = joined.channel();
-        session.ready(channel.no(), joined.pid(), now());
+        session.ready(channel.no(), joined.pid(), now);
         // into the broadcast set before the snapshot, so nothing falls between them;
         // the next batch may repeat someone the snapshot already has, and the browser ignores the repeat
         registry.joinChannel(session);
         sender.send(session, Welcome.of(props.protocolVersion(), joined.pid(), channel.no(), props.channelCapacity(),
                 channel.size(), props.presenceMs(), props.moveMinGapMs() + 50, props.heartbeatMs(),
-                channel.snapshot(joined.pid())));
+                channel.snapshot(joined.pid()), Spot.of(spot), owner != null));
     }
 
     private void onPing(ClientSession session, JsonNode msg) {
@@ -180,7 +219,8 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         }
         Channel channel = channels.get(session.channelNo());
         if (channel != null) {
-            channel.look(session.pid(), looks.normalize(msg.get("look")));
+            Look raw = looks.normalize(msg.get("look"));
+            channel.look(session.pid(), new Look(raw.name(), raw.species(), raw.colors(), raw.home() != null ? session.home() : null));
         }
     }
 

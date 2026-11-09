@@ -30,5 +30,9 @@ public record ParkProperties(
         @DefaultValue("2500") long prankSameTargetGapMs,
         @DefaultValue("9000") long prankAnswerWindowMs,
         @DefaultValue("2") int prankIgnoreLimit,
-        @DefaultValue("60000") long prankBlockMs) {
+        @DefaultValue("60000") long prankBlockMs,
+        // owners: the secret shared with the 앵로그 API to check park tokens (blank: tokens off),
+        // and how long an owner's last spot is kept for coming back
+        @DefaultValue("") String tokenSecret,
+        @DefaultValue("1800000") long spotMemoryMs) {
 }

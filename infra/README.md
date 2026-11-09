@@ -19,7 +19,7 @@
 infra/
   docker-compose.yml             db, api, realtime, web (포트를 호스트에 열지 않음)
   web.conf                       web 컨테이너의 Nginx 설정 (/api, /media, /ws 나누기)
-  .env.example                   DOMAIN(화면), API_DOMAIN(이 서버), DB_PASSWORD
+  .env.example                   DOMAIN(화면), API_DOMAIN(이 서버), DB_PASSWORD, PARK_TOKEN_SECRET
   scripts/deploy.sh              수동 배포 (git pull → 바뀐 컨테이너만 재빌드, 실패 시 롤백)
   scripts/backup-db.sh           DB 매일, 사진 매주 백업
   front-nginx/anglog.conf.template  고해야지 infra/app/nginx/ 에 두는 앞단 설정 (원본)
@@ -70,6 +70,7 @@ docker network create anglog-edge
 cd ~/anglog/anglog/infra
 cp .env.example .env
 sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=$(openssl rand -hex 24)|" .env   # DOMAIN, API_DOMAIN은 예시 값 그대로 맞다
+sed -i "s|^PARK_TOKEN_SECRET=.*|PARK_TOKEN_SECRET=$(openssl rand -hex 32)|" .env   # API와 앵파크가 같이 쓴다
 cat .env        # 확인만. DB_PASSWORD는 어디에도 따로 적을 필요 없다
 
 sudo ln -sf ~/anglog/anglog/infra/scripts/deploy.sh /usr/local/bin/anglog-deploy
@@ -132,6 +133,7 @@ ssh -i ~/.ssh/<서버키> rocky@<APP_IP> anglog-deploy
 **주의**
 - 서버에서 레포 파일을 직접 고치면 배포가 멈춘다. 수정은 항상 맥에서 커밋.
 - `docker compose down -v` 는 하지 말 것. `-v`가 DB와 사진 볼륨을 지운다.
+- 이미 돌고 있는 서버에 PARK_TOKEN_SECRET이 없으면 compose가 멈추며 알려 준다. 위의 sed 한 줄(PARK_TOKEN_SECRET)만 실행하고 배포한다. 값을 바꾸면 그때 공원에 있던 집사들은 다시 접속할 때 새 토큰을 받으니 따로 할 일은 없다.
 - `infra/.env`를 바꿨으면 `cd ~/anglog/anglog/infra && docker compose up -d`. 화면 주소(DOMAIN)를 바꾸면 Pages 설정과 `CNAME` 파일도 같이, API 주소를 바꾸면 `pages.yml`과 고해야지의 `ANGLOG_DOMAIN`, 인증서도 같이 바꾼다.
 
 ## 3. 자주 보는 것
