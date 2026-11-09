@@ -77,6 +77,17 @@ sudo ln -sf ~/anglog/anglog/infra/scripts/deploy.sh /usr/local/bin/anglog-deploy
 anglog-deploy   # 처음엔 api와 realtime을 빌드한다. 몇 분 걸림
 ```
 
+주의: 위 블록은 정말 처음 한 번만. DB 비밀번호는 DB를 처음 만들 때 볼륨에 박히고, 그 뒤로 `.env`의 DB_PASSWORD를 바꿔도 DB 쪽은 그대로다. 둘이 어긋나면 api가 `password authentication failed for user "anglog"`로 계속 재시작한다. 데이터는 멀쩡하니 DB 쪽을 `.env` 값에 맞춘다(컨테이너 안의 소켓 접속은 비밀번호 없이 된다).
+
+```bash
+cd ~/anglog/anglog/infra
+set -a; source .env; set +a
+docker compose exec -T db psql -U anglog -d anglog -v ON_ERROR_STOP=1 -v pw="$DB_PASSWORD" <<'SQL'
+ALTER USER anglog PASSWORD :'pw';
+SQL
+docker compose restart api
+```
+
 `배포 완료`가 나오면 스택은 떠 있다. 아직 밖에서는 안 보인다 (앞단 연결 전).
 
 **인증서** (고해야지 Nginx가 떠 있는 상태 그대로 발급된다. 80번의 첫 server 블록이 어떤 주소로 와도 인증 파일을 내준다)
