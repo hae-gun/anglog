@@ -463,6 +463,24 @@ export function makeBird(colors, species) {
         head.rotation.y = 0.9;
         if (head.userData.crest) head.userData.crest.rotation.z = -0.5;
         break;
+      case 'SPLASH': {
+        // water games: dip the face in, then flick the head up to throw the water over the back.
+        // Runs on t without the bird's own phase, so the park can time the spray to the flick.
+        const u = (((t % 1.2) + 1.2) % 1.2) / 1.2;
+        let dip;
+        if (u < 0.45) dip = Math.sin((u / 0.45) * Math.PI * 0.5);
+        else if (u < 0.6) dip = 1 - ((u - 0.45) / 0.15) * 1.7;
+        else dip = -0.7 + ((u - 0.6) / 0.4) * 0.7;
+        const down = Math.max(0, dip), up = Math.max(0, -dip);
+        inner.rotation.z = -0.32 * down + 0.12 * up;
+        head.rotation.z = -0.95 * down + 0.75 * up;
+        head.position.set(hx + 0.1 * down, hy - 0.2 * down, 0);
+        beak.scale.set(1, 1 + 0.25 * up, 1 + 0.15 * up);
+        wingPose(0.25 + up * 0.7, up * 0.5 + Math.sin(tt * 30) * 0.08 * up);
+        if (head.userData.crest) head.userData.crest.rotation.z = -0.5 * up;
+        eyeY = down > 0.6 ? 0.2 : 1;
+        break;
+      }
       case 'HUNGRY':
       case 'EAT': {
         const k = Math.max(0, Math.sin(tt * (mood === 'EAT' ? 9 : 6)));

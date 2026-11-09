@@ -4,11 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 /**
  * Position, yaw and pose code of a bird. Values from the browser are clamped to the park,
- * rounded to centimetres, and the pose code is one of 0..6 (idle, walk, fly, dance, happy, chirp, preen).
+ * rounded to centimetres, and the pose code is one of 0..7 (idle, walk, fly, dance, happy, chirp, preen, splash).
  */
 public record Pose(double x, double y, double z, double ry, int m) {
 
-    public static final int MAX_POSE = 6;
+    public static final int MAX_POSE = 7;
 
     /** null when the numbers are missing or not finite. */
     public static Pose from(JsonNode msg, double worldLimit, double heightLimit) {

@@ -17,7 +17,8 @@ const MAX_RESIDENTS = 8;
 const MAX_REMOTES_DRAWN = 24;
 const CRUISE = 3.0;
 const CRUISE_MIN = 0.8;
-const CRUISE_MAX = 9;
+const CRUISE_MAX = 11.5;
+const WORLD_R = 56; // how far you can fly (the realtime server takes up to 60)
 const WALK_SPEED = 3.2;
 const FLY_SPEED = 6.2;
 const clamp = THREE.MathUtils.clamp;
@@ -27,8 +28,8 @@ const CHIRPS = ['짹짹!', '짹!', '삐요', '짹짹짹'];
 const REPLIES = ['짹!', '삐약', '누구야?', '반가워!', '짹짹', '안녕!'];
 const HELLO = ['안녕!', '처음 보는 얼굴이네', '짹! 같이 놀자', '단풍 예쁘지?'];
 const PLAY_LINES = ['신난다!', '한 번 더!', '짹짹짹!', '같이 춤추자'];
-const MODE_CODE = { idle: 0, CALM: 0, WALK: 1, FLY: 2, DANCE: 3, HAPPY: 4, CHIRP: 5, PREEN: 6 };
-const CODE_MODE = ['idle', 'WALK', 'FLY', 'DANCE', 'HAPPY', 'CHIRP', 'PREEN'];
+const MODE_CODE = { idle: 0, CALM: 0, WALK: 1, FLY: 2, DANCE: 3, HAPPY: 4, CHIRP: 5, PREEN: 6, SPLASH: 7 };
+const CODE_MODE = ['idle', 'WALK', 'FLY', 'DANCE', 'HAPPY', 'CHIRP', 'PREEN', 'SPLASH'];
 
 const angleTo = (from, to) => Math.atan2(-(to.z - from.z), to.x - from.x);
 const dirAngle = (dx, dz) => Math.atan2(-dz, dx);
@@ -194,21 +195,50 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     }
   }
 
-  // ---- trees (instanced) -------------------------------------------------------------
+  // ---- trees: tall maples and ginkgos with low branches to sit on, drawn instanced ----------------
   const trunks = [];
   const crowns = []; // { x, y, z, r, color, cone }
-  function addMaple(x, z, s = 1) {
-    trunks.push({ x, z, h: 2.6 * s, r: 0.22 * s });
+  const limbs = []; // visible branches { a, b, r }
+  const occluders = []; // meshes the camera keeps out of (houses)
+  const occludeSpheres = []; // tree crowns, as spheres, for the camera (cheaper than casting rays at 600 instances)
+  const perchSegs = []; // everything a bird can sit on along its length: { a, b } (already lifted to the top of the wood)
+  const climbTrees = []; // { x, z, s, top, rr, segs } trees you can fly up into
+  /** A branch from the trunk outwards, a little upwards; the outer part is a perch. */
+  function limb(owner, A, B, r, perch = true) {
+    limbs.push({ a: A, b: B, r });
+    if (!perch) return;
+    const lift = new THREE.Vector3(0, r + 0.02, 0);
+    const seg = { a: A.clone().lerp(B, 0.3).add(lift), b: B.clone().lerp(A, 0.06).add(lift) };
+    perchSegs.push(seg);
+    if (owner) owner.segs.push(seg);
+  }
+  function addMaple(x, z, s = 1, climb = true) {
+    const H = 4.2 * s, cy = H + 1.5 * s;
+    trunks.push({ x, z, h: cy, r: 0.27 * s });
     const c = pick(AUTUMN);
-    crowns.push({ x, y: 3.4 * s, z, r: 1.9 * s, color: c });
-    crowns.push({ x: x + 0.9 * s, y: 2.9 * s, z: z + 0.4 * s, r: 1.2 * s, color: tint(c, '#F2B33D', 0.25) });
-    crowns.push({ x: x - 0.7 * s, y: 3.0 * s, z: z - 0.6 * s, r: 1.3 * s, color: tint(c, '#9E2A22', 0.2) });
-    obstacles.push({ x, z, r: 0.45 * s, h: 2.6 * s });
+    crowns.push({ x, y: cy, z, r: 2.5 * s, color: c });
+    crowns.push({ x: x + 1.4 * s, y: cy - 0.5 * s, z: z + 0.6 * s, r: 1.6 * s, color: tint(c, '#F2B33D', 0.25) });
+    crowns.push({ x: x - 1.1 * s, y: cy - 0.3 * s, z: z - 1.0 * s, r: 1.7 * s, color: tint(c, '#9E2A22', 0.2) });
+    crowns.push({ x: x + 0.2 * s, y: cy + 1.6 * s, z: z - 0.2 * s, r: 1.5 * s, color: tint(c, '#F08A24', 0.15) });
+    obstacles.push({ x, z, r: 0.5 * s, h: cy });
+    if (!climb) return;
+    const tr = { x, z, s, top: cy + 3.0 * s, rr: 1.4 * s, segs: [] };
+    const n = rnd() < 0.5 ? 3 : 2, a0 = rnd() * Math.PI * 2;
+    for (let k = 0; k < n; k++) {
+      const a = a0 + (k * Math.PI * 2) / n + (rnd() - 0.5) * 0.5;
+      const y = (2.0 + k * 0.45 + rnd() * 0.3) * s, L = (1.35 + rnd() * 0.35) * s;
+      limb(tr, new THREE.Vector3(x + Math.cos(a) * 0.2 * s, y, z + Math.sin(a) * 0.2 * s), new THREE.Vector3(x + Math.cos(a) * L, y + 0.35 * s, z + Math.sin(a) * L), 0.075 * s);
+    }
+    climbTrees.push(tr);
   }
   function addGinkgo(x, z) {
-    trunks.push({ x, z, h: 2.0, r: 0.16 });
-    crowns.push({ x, y: 3.0, z, r: 0.85, color: rnd() < 0.5 ? '#F2C53D' : '#E8B92E', cone: true });
-    obstacles.push({ x, z, r: 0.35, h: 2.0 });
+    trunks.push({ x, z, h: 4.4, r: 0.18 });
+    crowns.push({ x, y: 5.6, z, r: 1.3, color: rnd() < 0.5 ? '#F2C53D' : '#E8B92E', cone: true });
+    obstacles.push({ x, z, r: 0.35, h: 5.6 });
+    const tr = { x, z, s: 1, top: 7.15, rr: 0.5, segs: [] };
+    const a = rnd() * Math.PI * 2;
+    limb(tr, new THREE.Vector3(x, 2.5, z), new THREE.Vector3(x + Math.cos(a) * 1.25, 2.85, z + Math.sin(a) * 1.25), 0.06);
+    climbTrees.push(tr);
   }
   const PATH_A = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
   const POND = { x: -21, z: -14, r: 5 };
@@ -220,79 +250,97 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     gym: { x: 26, z: -4.5, r: 3 },
     pavilion: { x: -28.5, z: 0, r: 4.2 },
   };
-  const streamCurve = new THREE.CatmullRomCurve3([[-17.4, -17.4], [-12, -22], [-6, -26], [0, -28.5], [6, -31], [10.5, -35]].map(([x, z]) => new THREE.Vector3(x, 0, z)));
-  const streamPts = streamCurve.getSpacedPoints(64);
+  // the stream runs from the pond out of the park and into the river
+  const streamCurve = new THREE.CatmullRomCurve3([[-17.4, -17.4], [-12, -22], [-6, -26], [0, -28.5], [6, -31], [10.5, -35], [13.2, -40.5], [15.2, -45.5], [16.5, -50]].map(([x, z]) => new THREE.Vector3(x, 0, z)));
+  const streamPts = streamCurve.getSpacedPoints(90);
+
+  // 강가 산책로: a walk out of the east gate, through the maples, along the river, and back in at the west gate
+  const TRAIL_HALF = 1.3;
+  const RIVER_W = 4.2; // half the width of the river
+  const riverZ = (x) => -51 + 2.2 * Math.sin(x * 0.08 + 0.6);
+  const trailCurve = new THREE.CatmullRomCurve3([[PARK_R - 1.5, 0], [38, -4], [43, -13], [44.5, -24], [40, -33.5], [31, -39.5], [20, -41.5], [8, -40.5], [-4, -41.5], [-16, -41], [-27, -37.5], [-36, -30], [-41, -19], [-40, -8], [-PARK_R + 1.5, -1.5]].map(([x, z]) => new THREE.Vector3(x, 0, z)));
+  const trailPts = trailCurve.getSpacedPoints(240);
+  function nearTrail(x, z) {
+    let best = trailPts[0], bd = Infinity;
+    for (const q of trailPts) {
+      const d = (q.x - x) ** 2 + (q.z - z) ** 2;
+      if (d < bd) { bd = d; best = q; }
+    }
+    return { q: best, d: Math.sqrt(bd) };
+  }
+  // sandy beaches where the trail meets the river: the only places you can walk into the river
+  const BEACHES = [-16, 4, 24].map((bx) => {
+    const z = riverZ(bx) + RIVER_W - 0.3;
+    return { x: bx, z, r: Math.max(4.4, nearTrail(bx, z).d + 0.4) };
+  });
+  const deepLine = (x) => riverZ(x) + RIVER_W - 2.4;
+  const bridges = []; // { x, z, r } the stream is dry under these
+  const outsidePark = (x, z) => Math.hypot(x, z) > PARK_R + 1;
   const inZone = (x, z, pad) => Object.values(ZONES).some((q) => Math.hypot(x - q.x, z - q.z) < q.r + pad)
     || streamPts.some((q) => Math.hypot(x - q.x, z - q.z) < pad + 0.8);
   // ginkgo avenue along the entrance path (+z)
-  for (let z = 15; z < PARK_R - 2; z += 3.6) [-3.0, 3.0].forEach((x) => addGinkgo(x, z));
+  for (let z = 15; z < PARK_R - 2; z += 4.2) [-3.2, 3.2].forEach((x) => addGinkgo(x, z));
   // maples between the houses and the park edge
-  for (let i = 0, tries = 0; i < (small ? 46 : 64) && tries < 2000; tries++) {
+  for (let i = 0, tries = 0; i < (small ? 34 : 46) && tries < 2000; tries++) {
     const a = rnd() * Math.PI * 2;
     const r = 20.5 + rnd() * (PARK_R - 22);
-    if (PATH_A.some((p) => angDiff(a, p) < 2.4 / r + 0.04)) continue;
+    if (PATH_A.some((p) => angDiff(a, p) < 2.6 / r + 0.04)) continue;
     const p = at(a, r);
-    if (Math.hypot(p.x - POND.x, p.z - POND.z) < POND.r + 2.5) continue;
-    if (inZone(p.x, p.z, 2.4)) continue;
-    if (obstacles.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 3.2)) continue;
-    addMaple(p.x, p.z, 0.85 + rnd() * 0.45);
+    if (Math.hypot(p.x - POND.x, p.z - POND.z) < POND.r + 2.8) continue;
+    if (inZone(p.x, p.z, 2.6)) continue;
+    if (obstacles.some((o) => Math.hypot(o.x - p.x, o.z - p.z) < 4.4)) continue;
+    addMaple(p.x, p.z, 0.95 + rnd() * 0.3);
     i++;
   }
   // a few maples inside the ring too
-  [[7.5, 6.5], [-8, -6], [-7.5, 7], [8, -7.5]].forEach(([x, z]) => addMaple(x, z, 0.8));
-  const trunkMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.7, 1, 1, 7), mat('#7A5A3E'), trunks.length);
-  const dummy = new THREE.Object3D();
-  trunks.forEach((t, i) => {
-    dummy.position.set(t.x, t.h / 2, t.z);
-    dummy.rotation.set(0, 0, 0);
-    dummy.scale.set(t.r, t.h, t.r);
-    dummy.updateMatrix();
-    trunkMesh.setMatrixAt(i, dummy.matrix);
-  });
-  trunkMesh.castShadow = true;
-  scene.add(trunkMesh);
-  const crownMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true });
-  const roundCrowns = crowns.filter((c) => !c.cone);
-  const coneCrowns = crowns.filter((c) => c.cone);
-  const crownMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), crownMat, roundCrowns.length);
-  const coneMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 2.4, 7), crownMat, coneCrowns.length);
-  const col = new THREE.Color();
-  [[crownMesh, roundCrowns], [coneMesh, coneCrowns]].forEach(([mesh, list]) => {
-    list.forEach((c, i) => {
-      dummy.position.set(c.x, c.y, c.z);
-      dummy.rotation.set(0, rnd() * Math.PI, 0);
-      dummy.scale.setScalar(c.r);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
-      mesh.setColorAt(i, col.set(c.color).convertSRGBToLinear());
-    });
-    mesh.castShadow = true;
-    scene.add(mesh);
-  });
+  [[8, 7], [-8.5, -6.5], [-8, 7.5], [8.5, -8]].forEach(([x, z]) => addMaple(x, z, 0.85));
 
-  // the big maple in the middle, with two branches to sit on
-  rod(scene, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 4.2, 0), 0.42, '#7A5A3E');
-  const BR1 = { y: 2.6, z: 0, x0: 0.9, x1: 2.6 };
-  const BR2 = { y: 2.2, x: 0, z0: 0.9, z1: 2.6 };
-  rod(scene, new THREE.Vector3(0.2, BR1.y, 0), new THREE.Vector3(BR1.x1 + 0.2, BR1.y, 0), 0.09, '#7A5A3E');
-  rod(scene, new THREE.Vector3(0, BR2.y, 0.2), new THREE.Vector3(0, BR2.y, BR2.z1 + 0.2), 0.09, '#7A5A3E');
-  const occluders = [crownMesh, coneMesh];
-  [[0, 5.2, 0, 2.3, '#C7362F'], [-1.3, 4.5, 1, 1.5, '#E8662E'], [1.4, 4.7, -0.9, 1.6, '#D9442B'], [0.4, 6.3, 0.2, 1.4, '#F08A24']].forEach(([dx, y, dz, r, c]) => {
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), mat(c));
-    m.position.set(dx, y, dz);
-    m.castShadow = true;
-    scene.add(m);
-    occluders.push(m);
-  });
-  obstacles.push({ x: 0, z: 0, r: 1.9 });
-  const bed = new THREE.Mesh(new THREE.RingGeometry(0.5, 2.1, 28), mat('#7A5A3E'));
+  // ---- the giant tree in the middle: branches all the way up, for resting and playing -------------
+  const GT_H = 9.6;
+  const giantSegs = [];
+  {
+    const bark = mat('#6E4F36');
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 1.15, GT_H, 12), bark);
+    trunk.position.y = GT_H / 2;
+    trunk.castShadow = true;
+    scene.add(trunk);
+    // roots spreading into the flower bed
+    for (let k = 0; k < 6; k++) {
+      const a = k * 1.047 + 0.3;
+      limbs.push({ a: new THREE.Vector3(Math.cos(a) * 0.55, 1.0, Math.sin(a) * 0.55), b: new THREE.Vector3(Math.cos(a) * 1.9, 0, Math.sin(a) * 1.9), r: 0.26 });
+    }
+    // a wide, high crown
+    [[0, 12.8, 0, 3.6], [3.0, 11.6, 1.0, 2.8], [-2.7, 11.8, 1.7, 2.9], [1.3, 11.4, -3.0, 2.7], [-1.9, 11.2, -2.5, 2.6], [0.6, 15.0, 0.4, 2.6], [3.5, 13.0, -1.7, 2.2], [-3.5, 13.2, -0.4, 2.2]].forEach(([x, y, z, r], i) => {
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), mat(['#C7362F', '#E8662E', '#D9442B', '#F08A24', '#E9A13B'][i % 5]));
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      scene.add(m);
+      occludeSpheres.push({ x, y, z, r: r * 0.92 });
+    });
+    // thirteen branches spiralling up the trunk, each one a perch, with a twig or two for looks
+    const giant = { segs: giantSegs };
+    for (let i = 0; i < 13; i++) {
+      const a = i * 2.4, y = 1.9 + i * 0.48, L = 3.5 - i * 0.09, tr = 0.6 + (1 - y / GT_H) * 0.5;
+      const A = new THREE.Vector3(Math.cos(a) * tr * 0.8, y, Math.sin(a) * tr * 0.8);
+      const B = new THREE.Vector3(Math.cos(a) * L, y + 0.5, Math.sin(a) * L);
+      limb(giant, A, B, 0.15 - i * 0.004);
+      const mid = A.clone().lerp(B, 0.6);
+      const side = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(i % 2 ? 0.7 : -0.7);
+      limbs.push({ a: mid, b: mid.clone().add(side).add(new THREE.Vector3(0, 0.55, 0)), r: 0.045 });
+    }
+    obstacles.push({ x: 0, z: 0, r: 1.2, h: GT_H }); // the trunk, for flying birds too
+    obstacles.push({ x: 0, z: 0, r: 2.6, h: 0.3 }); // the flower bed
+  }
+  const bed = new THREE.Mesh(new THREE.RingGeometry(1.0, 2.6, 32), mat('#7A5A3E'));
   bed.rotation.x = -Math.PI / 2;
   bed.position.y = 0.015;
   scene.add(bed);
   const MUMS = ['#F2C53D', '#EDE7F4', '#B776C9', '#F08A24', '#E25B4E'];
-  const mumMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true }), 48);
-  for (let i = 0; i < 48; i++) {
-    const a = (i / 48) * Math.PI * 2 + rnd() * 0.1, r = 1.05 + (i % 3) * 0.38;
+  const mumMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.16, 0), new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true }), 60);
+  const dummy = new THREE.Object3D();
+  const col = new THREE.Color();
+  for (let i = 0; i < 60; i++) {
+    const a = (i / 60) * Math.PI * 2 + rnd() * 0.1, r = 1.4 + (i % 3) * 0.45;
     dummy.position.set(Math.cos(a) * r, 0.18 + rnd() * 0.08, Math.sin(a) * r);
     dummy.rotation.set(rnd(), rnd(), rnd());
     dummy.scale.setScalar(0.8 + rnd() * 0.5);
@@ -322,7 +370,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     lf.position.set(POND.x + Math.cos(a) * r, 0.04, POND.z + Math.sin(a) * r);
     scene.add(lf);
   }
-  obstacles.push({ x: POND.x, z: POND.z, r: POND.r + 0.3, h: 0 });
+  // the edge of the pond is shallow enough to wade in; the middle is not
+  obstacles.push({ x: POND.x, z: POND.z, r: POND.r - 1.6, h: 0 });
 
   const BATH = { x: -5.6, z: 3.8, r: 0.7, y: 0.84 };
   const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.3, 0.7, 10), mat('#D9D4CA'));
@@ -355,17 +404,32 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   seat.castShadow = true;
   swing.add(seat);
 
+  // perch stands (횟대 놀이대) where the benches used to be: a post with two crossed bars to sit and play on
+  const stands = []; // { x, z, segs }
+  const poles = []; // { a, b, r } drawn instanced in light wood
+  const standBases = [];
+  function perchStand(x, z, ry) {
+    const st = { x, z, segs: [] };
+    const dx = Math.cos(ry), dz = Math.sin(ry);
+    poles.push({ a: new THREE.Vector3(x, 0, z), b: new THREE.Vector3(x, 2.1, z), r: 0.075 });
+    const bar = (y, ux, uz, half) => {
+      const A = new THREE.Vector3(x - ux * half, y, z - uz * half), B = new THREE.Vector3(x + ux * half, y, z + uz * half);
+      poles.push({ a: A, b: B, r: 0.05 });
+      [[A, 0.06], [B, 0.06]].forEach(([e]) => poles.push({ a: e, b: e.clone().setY(y + 0.12), r: 0.035 })); // little end pegs
+      const lift = new THREE.Vector3(0, 0.07, 0);
+      const seg = { a: A.clone().lerp(B, 0.06).add(lift), b: B.clone().lerp(A, 0.06).add(lift) };
+      perchSegs.push(seg);
+      st.segs.push(seg);
+    };
+    bar(1.05, dx, dz, 1.05);
+    bar(1.8, -dz, dx, 0.75);
+    standBases.push([x, z]);
+    obstacles.push({ x, z, r: 0.45, h: 2.1 });
+    stands.push(st);
+  }
   [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75].forEach((a) => {
     const p = at(a, 9.6);
-    const g = new THREE.Group();
-    g.position.copy(p);
-    g.rotation.y = Math.atan2(-p.x, -p.z);
-    const plank = (y, z, hh) => { const m = new THREE.Mesh(new THREE.BoxGeometry(2.0, hh, 0.32), mat('#A8703F')); m.position.set(0, y, z); m.castShadow = true; g.add(m); };
-    plank(0.55, 0, 0.08);
-    plank(0.95, -0.25, 0.5);
-    [-0.85, 0.85].forEach((x) => { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.3), mat('#4A4038')); leg.position.set(x, 0.27, 0); g.add(leg); });
-    scene.add(g);
-    obstacles.push({ x: p.x, z: p.z, r: 0.9 });
+    perchStand(p.x, p.z, a + Math.PI / 2);
   });
   const bulbMat = new THREE.MeshBasicMaterial({ color: toLinear(env.night ? '#FFD98A' : '#F3EDE0') });
   for (let i = 0; i < 8; i++) {
@@ -630,31 +694,222 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   const streamMesh = new THREE.Mesh(swGeo, new THREE.MeshStandardMaterial({ color: toLinear(env.night ? '#2E4A66' : '#86BEDC'), roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide }));
   streamMesh.receiveShadow = true;
   scene.add(streamMesh);
-  const bridgeAt = streamPts.reduce((b, q) => (Math.abs(q.x) < Math.abs(b.x) ? q : b), streamPts[0]);
-  const bridge = new THREE.Group();
-  bridge.position.set(0, 0, bridgeAt.z);
-  scene.add(bridge);
   const plankM = mat('#A8703F');
-  const bdeck = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 3.6), plankM);
-  bdeck.position.y = 0.04;
-  bdeck.receiveShadow = true;
-  bridge.add(bdeck);
-  [-1.02, 1.02].forEach((x) => {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 3.6), plankM);
-    rail.position.set(x, 0.62, 0);
-    bridge.add(rail);
-    [-1.6, 0, 1.6].forEach((z) => {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.64, 0.1), plankM);
-      post.position.set(x, 0.32, z);
-      post.castShadow = true;
-      bridge.add(post);
+  /** A wooden footbridge across the stream; ry turns it to the path. */
+  function makeBridge(x, z, ry) {
+    const bridge = new THREE.Group();
+    bridge.position.set(x, 0, z);
+    bridge.rotation.y = ry;
+    scene.add(bridge);
+    const bdeck = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 3.6), plankM);
+    bdeck.position.y = 0.04;
+    bdeck.receiveShadow = true;
+    bridge.add(bdeck);
+    [-1.02, 1.02].forEach((bx) => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 3.6), plankM);
+      rail.position.set(bx, 0.62, 0);
+      bridge.add(rail);
+      [-1.6, 0, 1.6].forEach((bz) => {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.64, 0.1), plankM);
+        post.position.set(bx, 0.32, bz);
+        post.castShadow = true;
+        bridge.add(post);
+      });
     });
-  });
-  streamPts.forEach((q, i) => {
-    if (i % 2 || Math.hypot(q.x - bridgeAt.x, q.z - bridgeAt.z) < 2.4) return;
-    obstacles.push({ x: q.x, z: q.z, r: 0.9, h: 0 });
-  });
+    bridges.push({ x, z, r: 1.4 });
+  }
+  const bridgeAt = streamPts.reduce((b, q) => (Math.abs(q.x) < Math.abs(b.x) ? q : b), streamPts[0]);
+  makeBridge(0, bridgeAt.z, 0);
+  // where the riverside trail crosses the stream
+  {
+    let best = null, bd = Infinity;
+    streamPts.forEach((q) => { const t = nearTrail(q.x, q.z); if (t.d < bd) { bd = t.d; best = t.q; } });
+    const k = trailPts.indexOf(best);
+    const tg = trailPts[Math.min(trailPts.length - 1, k + 1)].clone().sub(trailPts[Math.max(0, k - 1)]);
+    makeBridge(best.x, best.z, Math.atan2(tg.x, tg.z));
+  }
   zoneSpots.push(() => { const q = pick(streamPts); return Math.hypot(q.x, q.z) < PARK_R - 1 ? { p: groundPoint(q.x + 1.3, q.z + 1.3), surface: 'ground', look: q } : null; });
+
+  // ---- the riverside trail ---------------------------------------------------------------------
+  {
+    const tp = [], ti = [];
+    trailPts.forEach((q, i) => {
+      const a = trailPts[Math.max(0, i - 1)], b = trailPts[Math.min(trailPts.length - 1, i + 1)];
+      const tx = b.x - a.x, tz = b.z - a.z, tl = Math.hypot(tx, tz) || 1;
+      const nx = -tz / tl, nz = tx / tl, half = TRAIL_HALF - 0.15;
+      tp.push(q.x + nx * half, 0.013, q.z + nz * half, q.x - nx * half, 0.013, q.z - nz * half);
+      if (i > 0) { const k = (i - 1) * 2; ti.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
+    });
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.Float32BufferAttribute(tp, 3));
+    tg.setIndex(ti);
+    tg.computeVertexNormals();
+    const trail = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ color: toLinear(env.night ? '#8F8068' : '#D9C39A'), roughness: 0.95, side: THREE.DoubleSide }));
+    trail.receiveShadow = true;
+    scene.add(trail);
+  }
+  // the river: wide and slow, with stones and reeds on the near bank
+  const riverMat = new THREE.MeshStandardMaterial({ color: toLinear(env.night ? '#2E4A66' : '#7FB6D6'), roughness: 0.15, metalness: 0.1, side: THREE.DoubleSide });
+  {
+    const rp = [], ri = [];
+    for (let i = 0, x = -110; x <= 110; x += 2, i++) {
+      const z = riverZ(x);
+      rp.push(x, 0.03, z + RIVER_W, x, 0.03, z - RIVER_W);
+      if (i > 0) { const k = (i - 1) * 2; ri.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    }
+    const rg = new THREE.BufferGeometry();
+    rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3));
+    rg.setIndex(ri);
+    rg.computeVertexNormals();
+    const river = new THREE.Mesh(rg, riverMat);
+    river.receiveShadow = true;
+    scene.add(river);
+  }
+  BEACHES.forEach((b) => {
+    const sand = new THREE.Mesh(new THREE.CircleGeometry(b.r, 32), mat(env.night ? '#9C8F74' : '#E6D3AE'));
+    sand.rotation.x = -Math.PI / 2;
+    sand.position.set(b.x, 0.014, b.z);
+    sand.receiveShadow = true;
+    scene.add(sand);
+    // the shallow part, paler where the sand shows through
+    const shallow = new THREE.Mesh(new THREE.CircleGeometry(1, 28), new THREE.MeshStandardMaterial({ color: toLinear(env.night ? '#456A80' : '#A9D8EC'), roughness: 0.2 }));
+    shallow.rotation.x = -Math.PI / 2;
+    shallow.scale.set(b.r * 0.85, 2.3, 1);
+    shallow.position.set(b.x, 0.034, riverZ(b.x) + RIVER_W - 1.1);
+    scene.add(shallow);
+  });
+  {
+    const reedN = small ? 160 : 300;
+    const reeds = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.02, 0.03, 1, 4), mat('#B9A46A'), reedN);
+    const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 5, 4), mat('#8A6A3E'), reedN);
+    let n = 0;
+    for (let tries = 0; n < reedN && tries < reedN * 6; tries++) {
+      const x = -60 + rnd() * 120;
+      // mostly on the near bank, some on the far one
+      const z = rnd() < 0.7 ? riverZ(x) + RIVER_W + (rnd() - 0.3) * 1.3 : riverZ(x) - RIVER_W - (rnd() - 0.3) * 1.3;
+      if (BEACHES.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + 0.5) || nearTrail(x, z).d < TRAIL_HALF + 0.4) continue;
+      const hh = 0.8 + rnd() * 0.7;
+      dummy.position.set(x, hh / 2, z);
+      dummy.rotation.set((rnd() - 0.5) * 0.25, 0, (rnd() - 0.5) * 0.25);
+      dummy.scale.set(1, hh, 1);
+      dummy.updateMatrix();
+      reeds.setMatrixAt(n, dummy.matrix);
+      dummy.position.y = hh;
+      dummy.scale.set(0.05, 0.16, 0.05);
+      dummy.updateMatrix();
+      heads.setMatrixAt(n, dummy.matrix);
+      n++;
+    }
+    reeds.count = heads.count = n;
+    scene.add(reeds, heads);
+  }
+  for (let x = -58; x < 58; x += 1.6) {
+    if (BEACHES.some((b) => Math.abs(x - b.x) < b.r)) continue;
+    const st = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2 + rnd() * 0.2, 0), mat('#BDB6A8'));
+    st.position.set(x + rnd() * 0.8, 0.08, riverZ(x) + RIVER_W + 0.15);
+    scene.add(st);
+  }
+  // maples on both sides of the trail (a tunnel of autumn colour), more trees across the river
+  for (let i = 0, tries = 0; i < (small ? 26 : 44) && tries < 3000; tries++) {
+    const q = trailPts[Math.floor(rnd() * trailPts.length)];
+    const a = rnd() * Math.PI * 2, d = 3.4 + rnd() * 6;
+    const x = q.x + Math.cos(a) * d, z = q.z + Math.sin(a) * d;
+    if (!outsidePark(x, z) || nearTrail(x, z).d < 3.2 || z < riverZ(x) + RIVER_W + 1.6) continue;
+    if (BEACHES.some((b) => Math.hypot(x - b.x, z - b.z) < b.r + 1.5) || inZone(x, z, 2)) continue;
+    if (obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < 4.2)) continue;
+    addMaple(x, z, 0.95 + rnd() * 0.3);
+    i++;
+  }
+  for (let i = 0, tries = 0; i < (small ? 12 : 22) && tries < 600; tries++) {
+    const x = -60 + rnd() * 120, z = riverZ(x) - RIVER_W - 2.5 - rnd() * 9;
+    if (obstacles.some((o) => Math.hypot(o.x - x, o.z - z) < 4.2)) continue;
+    addMaple(x, z, 1 + rnd() * 0.3, false);
+    i++;
+  }
+  /** A point beside the trail at fraction f, off to the side away from the river (or away from the park). */
+  function trailSide(f, off) {
+    const k = Math.min(trailPts.length - 2, Math.floor(f * (trailPts.length - 1)));
+    const q = trailPts[k], nq = trailPts[k + 1];
+    const tx = nq.x - q.x, tz = nq.z - q.z, tl = Math.hypot(tx, tz) || 1;
+    const A = { x: q.x - (tz / tl) * off, z: q.z + (tx / tl) * off }, B = { x: q.x + (tz / tl) * off, z: q.z - (tx / tl) * off };
+    const wet = (p) => p.z - riverZ(p.x);
+    const pick2 = Math.min(wet(A), wet(B)) < 9 ? (wet(A) > wet(B) ? A : B) : (Math.hypot(A.x, A.z) > Math.hypot(B.x, B.z) ? A : B);
+    return { ...pick2, ry: Math.atan2(tz, tx) };
+  }
+  // perch stands along the trail and on each beach, lamps every so often
+  [0.1, 0.27, 0.45, 0.62, 0.8, 0.94].forEach((f) => {
+    const p = trailSide(f, TRAIL_HALF + 1.1);
+    perchStand(p.x, p.z, p.ry);
+  });
+  BEACHES.forEach((b) => perchStand(b.x + (b.x > 0 ? -2.4 : 2.4), b.z + 1.6, 0.3));
+  for (let i = 0; i < 9; i++) {
+    const p = trailSide((i + 0.5) / 9, TRAIL_HALF + 0.5);
+    rod(scene, new THREE.Vector3(p.x, 0, p.z), new THREE.Vector3(p.x, 2.6, p.z), 0.05, '#4A4038');
+    const bl = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), bulbMat);
+    bl.position.set(p.x, 2.75, p.z);
+    scene.add(bl);
+    obstacles.push({ x: p.x, z: p.z, r: 0.15, h: 2.8 });
+  }
+
+  // ---- now that every tree is placed, draw them (and every branch and pole) instanced ------------
+  {
+    const trunkMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.7, 1, 1, 7), mat('#7A5A3E'), trunks.length);
+    trunks.forEach((t, i) => {
+      dummy.position.set(t.x, t.h / 2, t.z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(t.r, t.h, t.r);
+      dummy.updateMatrix();
+      trunkMesh.setMatrixAt(i, dummy.matrix);
+    });
+    trunkMesh.castShadow = true;
+    scene.add(trunkMesh);
+    const crownMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true });
+    const roundCrowns = crowns.filter((c) => !c.cone);
+    const coneCrowns = crowns.filter((c) => c.cone);
+    const crownMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), crownMat, roundCrowns.length);
+    const coneMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 2.4, 7), crownMat, coneCrowns.length);
+    [[crownMesh, roundCrowns], [coneMesh, coneCrowns]].forEach(([mesh, list]) => {
+      list.forEach((c, i) => {
+        dummy.position.set(c.x, c.y, c.z);
+        dummy.rotation.set(0, rnd() * Math.PI, 0);
+        dummy.scale.setScalar(c.r);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+        mesh.setColorAt(i, col.set(c.color).convertSRGBToLinear());
+        occludeSpheres.push({ x: c.x, y: c.y, z: c.z, r: c.r * (c.cone ? 0.8 : 0.92) });
+      });
+      mesh.castShadow = true;
+      scene.add(mesh);
+    });
+    const rods = (list, hex) => {
+      const m = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 7), mat(hex), list.length);
+      const dir = new THREE.Vector3();
+      list.forEach((l, i) => {
+        dir.subVectors(l.b, l.a);
+        const len = dir.length();
+        dummy.position.copy(l.a).addScaledVector(dir, 0.5);
+        dummy.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+        dummy.scale.set(l.r, len, l.r);
+        dummy.updateMatrix();
+        m.setMatrixAt(i, dummy.matrix);
+      });
+      dummy.quaternion.identity();
+      m.castShadow = true;
+      scene.add(m);
+    };
+    rods(limbs, '#6E4F36');
+    rods(poles, '#C9925A');
+    const baseMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.58, 0.1, 10), mat('#A8703F'), standBases.length);
+    standBases.forEach(([x, z], i) => {
+      dummy.position.set(x, 0.05, z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      baseMesh.setMatrixAt(i, dummy.matrix);
+    });
+    baseMesh.receiveShadow = true;
+    scene.add(baseMesh);
+  }
 
   // ---- fallen leaves and leaf piles -------------------------------------------------------
   const leafGeo = new THREE.PlaneGeometry(0.2, 0.12);
@@ -814,10 +1069,34 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   }
 
   // ---- ground rules ------------------------------------------------------------------------
+  /** On foot you can be in the park, on the trail, or on a beach (and a little way into the water there). */
+  function walkable(x, z) {
+    if (x * x + z * z < (PARK_R - 0.8) ** 2) return true;
+    if (nearTrail(x, z).d < TRAIL_HALF) return true;
+    return BEACHES.some((b) => Math.hypot(x - b.x, z - b.z) < b.r && z > deepLine(x));
+  }
+  /** The nearest place you can stand. */
+  function toWalkable(x, z) {
+    if (walkable(x, z)) return [x, z];
+    const cands = [];
+    const d = Math.hypot(x, z) || 1;
+    cands.push([(x * (PARK_R - 0.85)) / d, (z * (PARK_R - 0.85)) / d]);
+    const t = nearTrail(x, z);
+    if (t.d > 0) { const k = (TRAIL_HALF - 0.05) / t.d; cands.push([t.q.x + (x - t.q.x) * k, t.q.z + (z - t.q.z) * k]); }
+    BEACHES.forEach((b) => {
+      const bd = Math.hypot(x - b.x, z - b.z);
+      let px = x, pz = z;
+      if (bd > b.r - 0.05) { px = b.x + ((x - b.x) * (b.r - 0.05)) / bd; pz = b.z + ((z - b.z) * (b.r - 0.05)) / bd; }
+      pz = Math.max(pz, deepLine(px) + 0.05);
+      if (walkable(px, pz)) cands.push([px, pz]);
+    });
+    let best = cands[0], bd = Infinity;
+    cands.forEach((c) => { const dd = (c[0] - x) ** 2 + (c[1] - z) ** 2; if (dd < bd) { bd = dd; best = c; } });
+    return best;
+  }
   function groundPoint(x, z) {
-    const d = Math.hypot(x, z);
-    if (d > PARK_R - 0.8) { x *= (PARK_R - 0.8) / d; z *= (PARK_R - 0.8) / d; }
-    const p = new THREE.Vector3(x, 0, z);
+    const [wx, wz] = toWalkable(x, z);
+    const p = new THREE.Vector3(wx, 0, wz);
     for (let pass = 0; pass < 2; pass++) {
       obstacles.forEach((o) => {
         if (o.air) return;
@@ -829,7 +1108,45 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
         }
       });
     }
+    [p.x, p.z] = toWalkable(p.x, p.z);
     return p;
+  }
+  /** Shallow water you can stand in: the pond's edge, the stream, the river by the beaches. */
+  function waterAt(x, z) {
+    if (Math.hypot(x - POND.x, z - POND.z) < POND.r - 0.15) return true;
+    if (Math.abs(z - riverZ(x)) < RIVER_W - 0.1) return true;
+    if (z < -15 && z > -52 && x > -19 && x < 19 && !bridges.some((b) => Math.hypot(x - b.x, z - b.z) < b.r)) {
+      for (const q of streamPts) if ((q.x - x) ** 2 + (q.z - z) ** 2 < 0.56) return true;
+    }
+    return false;
+  }
+  /** The closest point on any perch (or on the given ones) to p. */
+  function nearestPerch(p, list = perchSegs) {
+    let best = null;
+    const ab = new THREE.Vector3(), q = new THREE.Vector3();
+    for (const s of list) {
+      ab.subVectors(s.b, s.a);
+      const t = clamp(q.subVectors(p, s.a).dot(ab) / ab.lengthSq(), 0, 1);
+      q.copy(s.a).addScaledVector(ab, t);
+      const d = q.distanceTo(p);
+      if (!best || d < best.d) best = { s, t, d, p: q.clone() };
+    }
+    return best;
+  }
+  /** The closest perch point straight below (x, z) that is lower than y, within reach sideways. */
+  function perchBelow(x, z, y, reach) {
+    let best = null;
+    const ab = new THREE.Vector3();
+    for (const s of perchSegs) {
+      ab.subVectors(s.b, s.a);
+      const L2 = ab.x * ab.x + ab.z * ab.z || 1;
+      const t = clamp(((x - s.a.x) * ab.x + (z - s.a.z) * ab.z) / L2, 0, 1);
+      const px = s.a.x + ab.x * t, py = s.a.y + ab.y * t, pz = s.a.z + ab.z * t;
+      const d = Math.hypot(px - x, pz - z);
+      if (d > reach || py > y + 0.2) continue;
+      if (!best || py > best.p.y) best = { s, t, p: new THREE.Vector3(px, py, pz) };
+    }
+    return best;
   }
   function blocked(a, b) {
     const abx = b.x - a.x, abz = b.z - a.z, L2 = abx * abx + abz * abz || 1;
@@ -850,8 +1167,14 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     });
     return p;
   }
-  /** Where a bird coming straight down lands: a roof, the pavilion, the gym bar, the bath, or the ground. */
-  function surfaceBelow(x, z) {
+  /** The top of a tree's crown, a little lower towards its edge. */
+  const canopyAt = (tr, x, z) => {
+    const d = Math.hypot(x - tr.x, z - tr.z);
+    const k = Math.min(1, d / tr.rr);
+    return new THREE.Vector3(tr.x + (x - tr.x) * Math.min(1, tr.rr / Math.max(d, 0.001)) * k, tr.top - 0.35 * tr.s * k * k, tr.z + (z - tr.z) * Math.min(1, tr.rr / Math.max(d, 0.001)) * k);
+  };
+  /** Where a bird coming straight down from height y lands: a roof, a treetop, a branch, the bath, or the ground. */
+  function surfaceBelow(x, z, y = 99) {
     for (const hh of houses) {
       if (Math.hypot(x - hh.center.x, z - hh.center.z) < 1.35) {
         const ab = hh.ridgeB.clone().sub(hh.ridgeA);
@@ -862,6 +1185,10 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const pr = Math.hypot(x - ZONES.pavilion.x, z - ZONES.pavilion.z);
     if (pr < 3.5) return { p: new THREE.Vector3(x, pr < 0.45 ? 4.2 : 4.05 - pr * (1.5 / 3.7), z), surface: 'roof' };
     if (gymLanding && Math.hypot(x - ZONES.gym.x, z - ZONES.gym.z) < 1.3) return gymLanding(x, z);
+    const tree = climbTrees.find((tr) => Math.hypot(x - tr.x, z - tr.z) < tr.rr + 0.6 * tr.s && y > tr.top - 1.5);
+    if (tree) return { p: canopyAt(tree, x, z), surface: 'canopy' };
+    const br = perchBelow(x, z, y, 0.9);
+    if (br) return { p: br.p, surface: 'branch' };
     if (Math.hypot(x - BATH.x, z - BATH.z) < 1.0) return bathSpot(new THREE.Vector3(x, 0, z));
     return { p: groundPoint(x, z), surface: 'ground' };
   }
@@ -957,17 +1284,38 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   }
 
   // places to hang out
-  const branchSpot = () => (Math.random() < 0.5
-    ? { p: new THREE.Vector3(BR1.x0 + Math.random() * (BR1.x1 - BR1.x0), BR1.y + 0.08, BR1.z), surface: 'branch' }
-    : { p: new THREE.Vector3(BR2.x, BR2.y + 0.08, BR2.z0 + Math.random() * (BR2.z1 - BR2.z0)), surface: 'branch' });
+  const free = (p) => !actors.some((o) => o.pos.distanceTo(p) < 0.55);
+  /** A free spot on a branch: half the time on the giant tree, otherwise any tree or perch stand. */
+  function branchSpot(near) {
+    for (let k = 0; k < 6; k++) {
+      let list = Math.random() < 0.5 ? giantSegs : perchSegs;
+      if (near && list === perchSegs) list = perchSegs.filter((sg) => sg.a.distanceTo(near) < 16);
+      if (!list.length) list = giantSegs;
+      const sg = pick(list);
+      const p = sg.a.clone().lerp(sg.b, 0.1 + Math.random() * 0.8);
+      if (free(p)) return { p, surface: 'branch' };
+    }
+    return null;
+  }
   const bathSpot = (near) => {
     const a = near ? Math.atan2(near.z - BATH.z, near.x - BATH.x) + (Math.random() - 0.5) * 0.6 : Math.random() * Math.PI * 2;
     return { p: new THREE.Vector3(BATH.x + Math.cos(a) * BATH.r, BATH.y, BATH.z + Math.sin(a) * BATH.r), surface: 'bath' };
   };
-  const pondSpot = () => {
-    const a = Math.random() * Math.PI * 2;
-    return { p: new THREE.Vector3(POND.x + Math.cos(a) * (POND.r + 0.7), 0, POND.z + Math.sin(a) * (POND.r + 0.7)), surface: 'ground', pond: true };
-  };
+  /** Somewhere shallow to play in: the edge of the pond, the stream, or a beach on the river. */
+  function wadeSpot() {
+    const r = Math.random();
+    if (r < 0.45) {
+      const a = Math.random() * Math.PI * 2, rr = POND.r - 0.6 - Math.random() * 0.7;
+      return { p: new THREE.Vector3(POND.x + Math.cos(a) * rr, 0, POND.z + Math.sin(a) * rr), surface: 'ground', wade: true, look: new THREE.Vector3(POND.x, 0, POND.z) };
+    }
+    if (r < 0.7) {
+      const q = streamPts[6 + Math.floor(Math.random() * 40)];
+      if (bridges.some((b) => Math.hypot(q.x - b.x, q.z - b.z) < b.r + 0.5)) return null;
+      return { p: new THREE.Vector3(q.x, 0, q.z), surface: 'ground', wade: true };
+    }
+    const b = pick(BEACHES), x = b.x + (Math.random() - 0.5) * 3.5;
+    return { p: groundPoint(x, riverZ(x) + RIVER_W - 0.9 - Math.random() * 1.0), surface: 'ground', wade: true, look: new THREE.Vector3(x, 0, riverZ(x)) };
+  }
   const swingRiders = () => actors.filter((a) => a.surface === 'swing' && !a.move && !a.remote);
   function swingSpot() {
     const taken = swingRiders().map((a) => a.swingDx);
@@ -980,12 +1328,18 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     if (b.surface === 'bath') return bathSpot(b.pos);
     if (b.surface === 'swing') { const s = swingSpot(); if (s) return s; }
     if (b.surface === 'branch') {
-      const nudge = (v0, lo, hi) => {
-        const a = clamp(v0 + side * 0.9, lo, hi);
-        return Math.abs(a - v0) > 0.5 ? a : clamp(v0 - side * 0.9, lo, hi);
-      };
-      if (Math.abs(b.pos.y - (BR1.y + 0.08)) < 0.1) return { p: new THREE.Vector3(nudge(b.pos.x, BR1.x0, BR1.x1), b.pos.y, BR1.z), surface: 'branch' };
-      return { p: new THREE.Vector3(BR2.x, b.pos.y, nudge(b.pos.z, BR2.z0, BR2.z1)), surface: 'branch' };
+      // along the same branch, a bird's width away
+      const n = nearestPerch(b.pos);
+      if (n && n.d < 0.4) {
+        const step = 0.85 / Math.max(0.5, n.s.a.distanceTo(n.s.b));
+        let t = n.t + side * step;
+        if (t < 0 || t > 1) t = n.t - side * step;
+        return { p: n.s.a.clone().lerp(n.s.b, clamp(t, 0, 1)), surface: 'branch' };
+      }
+    }
+    if (b.surface === 'canopy') {
+      const tr = climbTrees.find((t) => Math.hypot(b.pos.x - t.x, b.pos.z - t.z) < t.rr + 1);
+      if (tr) return { p: canopyAt(tr, b.pos.x + side * 0.8, b.pos.z + 0.4), surface: 'canopy' };
     }
     return { p: groundPoint(b.pos.x + side * 1.0, b.pos.z + 0.5), surface: 'ground' };
   }
@@ -1010,12 +1364,13 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       flyTo(r, spot.p, spot.surface, () => { faceEachOther(r, player); say(r, pick(HELLO)); playCall('chirp', r.pitch, loudness(r)); });
       return;
     }
-    if (x < 0.22) spot = branchSpot();
-    else if (x < 0.3) spot = bathSpot();
-    else if (x < 0.36) spot = swingSpot();
-    else if (x < 0.42) spot = pondSpot();
-    else if (x < 0.48) { const p = pick(PILES); spot = { p: groundPoint(p.x + 0.4, p.z + 0.4), surface: 'ground' }; }
-    else if (x < 0.7) spot = pick(zoneSpots)();
+    if (x < 0.3) spot = branchSpot(r.pos);
+    else if (x < 0.34) { const tr = pick(climbTrees.filter((t) => t.top < CRUISE_MAX)); spot = tr && { p: canopyAt(tr, tr.x + 0.3, tr.z), surface: 'canopy' }; }
+    else if (x < 0.39) spot = bathSpot();
+    else if (x < 0.43) spot = swingSpot();
+    else if (x < 0.52) spot = wadeSpot();
+    else if (x < 0.56) { const p = pick(PILES); spot = { p: groundPoint(p.x + 0.4, p.z + 0.4), surface: 'ground' }; }
+    else if (x < 0.74) spot = pick(zoneSpots)();
     else if (x < 0.8) spot = { p: r.house.perch.clone(), surface: 'perch' };
     if (!spot) {
       const base = r.house.front;
@@ -1027,8 +1382,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       if (s.surface === 'swing') r.swingDx = s.dx;
       if (s.after) s.after(r);
       if (s.look) r.rotTarget = angleTo(r.pos, s.look);
-      if (s.surface === 'bath') { act(r, 'HAPPY', 2.5); r.rotTarget = angleTo(r.pos, new THREE.Vector3(BATH.x, 0, BATH.z)); }
-      else if (s.pond) r.rotTarget = angleTo(r.pos, new THREE.Vector3(POND.x, 0, POND.z));
+      if (s.surface === 'bath') { act(r, 'SPLASH', 3.6); r.rotTarget = angleTo(r.pos, new THREE.Vector3(BATH.x, 0, BATH.z)); }
+      else if (s.wade) { act(r, 'SPLASH', 3.6 + Math.random() * 2.4); if (Math.random() < 0.5) say(r, pick(['첨벙첨벙', '물놀이다!', '시원해']), 1.4); }
       else if (s.surface === 'perch') r.rotTarget = dirAngle(r.house.front.x - r.house.perch.x, r.house.front.z - r.house.perch.z);
     });
   }
@@ -1095,6 +1450,22 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   const yawBehind = (r) => Math.atan2(-Math.cos(r), Math.sin(r));
   const rotForYaw = (yaw) => Math.atan2(Math.cos(yaw), -Math.sin(yaw));
   let fpPitch = 0;
+  /** Distance along dir from o to the first tree crown in the way (crowns that hold o do not count). */
+  function sphereHit(o, dir, far) {
+    let best = far;
+    for (const s of occludeSpheres) {
+      const ox = o.x - s.x, oy = o.y - s.y, oz = o.z - s.z;
+      const c = ox * ox + oy * oy + oz * oz - s.r * s.r;
+      if (c < 0) continue;
+      const b = ox * dir.x + oy * dir.y + oz * dir.z;
+      if (b > 0) continue;
+      const disc = b * b - c;
+      if (disc < 0) continue;
+      const t = -b - Math.sqrt(disc);
+      if (t > 0 && t < best) best = t;
+    }
+    return best;
+  }
   function stepCamera(dt, snap, moving) {
     // third person: while the bird moves, the camera swings round behind it (a drag pauses this)
     if (view === 'third' && moving && clock > manualUntil && !entering) {
@@ -1127,12 +1498,14 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       camRay.set(look, dir);
       camRay.far = cam.dist;
       const hit = camRay.intersectObjects(occluders, false)[0];
-      return { pitch, dir, reach: hit ? hit.distance - 0.4 : cam.dist };
+      const near = Math.min(hit ? hit.distance : cam.dist, sphereHit(look, dir, cam.dist));
+      return { pitch, dir, reach: near < cam.dist ? near - 0.4 : cam.dist };
     };
     let best = reachAt(cam.pitch);
-    for (const extra of [0.35, 0.7]) {
+    // under a tree the way out is often lower, not higher
+    for (const extra of [-0.3, 0.35, 0.7]) {
       if (best.reach >= Math.min(cam.dist, 3.2)) break;
-      const alt = reachAt(Math.min(1.4, cam.pitch + extra));
+      const alt = reachAt(clamp(cam.pitch + extra, 0.04, 1.4));
       if (alt.reach > best.reach + 0.5) best = alt;
     }
     camLift += ((best.pitch - cam.pitch) - camLift) * (snap ? 1 : 1 - Math.exp(-dt * 4));
@@ -1169,17 +1542,28 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   scene.add(marker);
   let markerT = -9;
   const landables = [];
+  // tap targets are never drawn (the raycaster does not care), so they cost nothing per frame
   const land = (geo, pos, fn) => {
     const m = new THREE.Mesh(geo, hitMat);
     m.position.copy(pos);
     m.userData.land = fn;
+    m.visible = false;
     scene.add(m);
+    m.updateMatrixWorld(true);
     landables.push(m);
   };
-  land(new THREE.BoxGeometry(BR1.x1 - BR1.x0 + 0.4, 0.8, 0.8), new THREE.Vector3((BR1.x0 + BR1.x1) / 2, BR1.y, BR1.z),
-    (pt) => ({ p: new THREE.Vector3(clamp(pt.x, BR1.x0, BR1.x1), BR1.y + 0.08, BR1.z), surface: 'branch' }));
-  land(new THREE.BoxGeometry(0.8, 0.8, BR2.z1 - BR2.z0 + 0.4), new THREE.Vector3(BR2.x, BR2.y, (BR2.z0 + BR2.z1) / 2),
-    (pt) => ({ p: new THREE.Vector3(BR2.x, BR2.y + 0.08, clamp(pt.z, BR2.z0, BR2.z1)), surface: 'branch' }));
+  const onPerch = (segs) => (pt) => { const n = nearestPerch(pt, segs); return n && { p: n.p, surface: 'branch' }; };
+  // the giant tree: tap where you want to sit and you get the nearest branch to that spot
+  land(new THREE.CylinderGeometry(3.6, 3.6, 7.4, 12), new THREE.Vector3(0, 5.2, 0), onPerch(giantSegs));
+  // every other tree: the branches, or the very top of the crown
+  climbTrees.forEach((tr) => {
+    const lo = 1.7 * tr.s, hgt = tr.top - lo;
+    land(new THREE.CylinderGeometry(tr.rr + 0.9 * tr.s, tr.rr + 0.9 * tr.s, hgt, 8), new THREE.Vector3(tr.x, lo + hgt / 2, tr.z), (pt) => {
+      if (pt.y > tr.top - 2.2 * tr.s) return { p: canopyAt(tr, pt.x, pt.z), surface: 'canopy' };
+      return onPerch(tr.segs)(pt);
+    });
+  });
+  stands.forEach((st) => land(new THREE.CylinderGeometry(1.15, 1.15, 1.6, 8), new THREE.Vector3(st.x, 1.35, st.z), onPerch(st.segs)));
   land(new THREE.CylinderGeometry(0.95, 0.95, 0.5, 12), new THREE.Vector3(BATH.x, 0.7, BATH.z), (pt) => bathSpot(pt));
   land(new THREE.BoxGeometry(2.0, 0.9, 1.4), new THREE.Vector3(SW.x, SW.top - SW.len, SW.z), () => swingSpot());
   zoneLands.forEach(([geo, pos, fn]) => land(geo, pos, fn));
@@ -1289,7 +1673,9 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     goTo(player, target, surface, () => {
       if (after) after(player);
       if (surface === 'swing') { player.swingDx = dx; say(player, '흔들흔들', 1.2); }
-      if (surface === 'bath') { act(player, 'HAPPY', 2.5); say(player, '첨벙첨벙', 1.4); }
+      if (surface === 'bath') { act(player, 'SPLASH', 3.6); say(player, '첨벙첨벙', 1.4); player.splashAt = clock + 7; }
+      else if (surface === 'ground' && waterAt(player.pos.x, player.pos.z)) { act(player, 'SPLASH', 3.6); player.splashAt = clock + 7; }
+      else if (surface === 'canopy') say(player, pick(['나무 꼭대기다!', '하늘이 가까워', '여기 최고']), 1.4);
     });
     marker.position.set(target.x, target.y + 0.03, target.z);
     markerT = clock;
@@ -1312,7 +1698,10 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       // on a branch, roof or the bath: hop down the way the stick points, then walk on
       if (!player.move || player.move.type !== 'fly') {
         player.action = null;
-        flyTo(player, groundPoint(player.pos.x + dx * 1.6, player.pos.z + dz * 1.6), 'ground', null);
+        // down a branch at a time when there is one ahead, otherwise to the ground
+        const ahead = perchBelow(player.pos.x + dx * 1.3, player.pos.z + dz * 1.3, player.pos.y - 0.3, 1.0);
+        if (ahead && player.pos.y - ahead.p.y < 2.8 && free(ahead.p)) flyTo(player, ahead.p, 'branch', null);
+        else flyTo(player, groundPoint(player.pos.x + dx * 1.6, player.pos.z + dz * 1.6), 'ground', null);
       }
       return true;
     }
@@ -1326,8 +1715,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       z = p.z;
       player.surface = 'ground';
     } else {
-      const d = Math.hypot(x, z);
-      if (d > PARK_R + 6) { x *= (PARK_R + 6) / d; z *= (PARK_R + 6) / d; }
+      x = clamp(x, -WORLD_R, WORLD_R);
+      z = clamp(z, -WORLD_R, WORLD_R);
       const q = airPush(x, z, player.pos.y);
       x = q.x;
       z = q.z;
@@ -1353,7 +1742,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       return;
     }
     // coming down onto whatever is below: a roof, the pavilion, the gym, the bath or the ground
-    const below = surfaceBelow(player.pos.x, player.pos.z);
+    if (!landing.below) landing = { below: surfaceBelow(player.pos.x, player.pos.z, player.pos.y) };
+    const below = landing.below;
     player.pos.y += (below.p.y - player.pos.y) * (1 - Math.exp(-dt * 3.5));
     const k = 1 - Math.exp(-dt * 6);
     player.pos.x += (below.p.x - player.pos.x) * k;
@@ -1364,6 +1754,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       landing = false;
       player.surface = below.surface;
       if (below.surface === 'roof') say(player, pick(['지붕 위다!', '높다!']), 1.2);
+      if (below.surface === 'canopy') say(player, pick(['나무 꼭대기다!', '단풍 이불이다']), 1.2);
+      if (below.surface === 'branch') say(player, pick(['나뭇가지 위!', '여기 좋다']), 1.2);
     }
   }
 
@@ -1382,6 +1774,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const k = 1 - Math.exp(-dt * 9);
     remotes.forEach((a) => {
       a.pos.lerp(a.remote.target, k);
+      if (a.remote.target.y < 0.05 && waterAt(a.pos.x, a.pos.z)) a.pos.y = -0.1;
       a.rotTarget = a.remote.ry;
     });
     if (remotes.size > MAX_REMOTES_DRAWN) {
@@ -1417,6 +1810,93 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     flyTo(player, groundPoint(0, 23), 'ground', () => { say(player, '가을이다!', 1.6); playCall('chirp', 1, 0.8); });
   }
   stepCamera(0, true);
+
+  // ---- water play: ripples where birds stand in water, and the spray when they flick it up ---------
+  const ripples = Array.from({ length: 18 }, () => {
+    const m = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.visible = false;
+    scene.add(m);
+    return { m, life: 0, size: 1 };
+  });
+  let rippleNext = 0;
+  function ripple(x, y, z, size = 1) {
+    const r = ripples[rippleNext];
+    rippleNext = (rippleNext + 1) % ripples.length;
+    r.m.position.set(x, y, z);
+    r.life = 1;
+    r.size = size;
+    r.m.visible = true;
+  }
+  const dropN = 240;
+  const drops = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 6, 4), new THREE.MeshBasicMaterial({ color: toLinear(env.night ? "#9FC4DC" : "#F2FAFF") }), dropN);
+  drops.frustumCulled = false;
+  scene.add(drops);
+  const DR = Array.from({ length: dropN }, () => ({ life: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), floor: 0 }));
+  let dropNext = 0;
+  /** Water thrown up from in front of a bird's beak, up and back over its head. */
+  function spray(a, n) {
+    const ry = a.b.group.rotation.y, fx = Math.cos(ry), fz = -Math.sin(ry);
+    const size = (a.b.size || 1) * a.scale;
+    const floor = a.surface === 'bath' ? BATH.y + 0.03 : 0.03;
+    const ox = a.pos.x + fx * 0.42 * size, oz = a.pos.z + fz * 0.42 * size;
+    for (let k = 0; k < n; k++) {
+      const d = DR[dropNext];
+      dropNext = (dropNext + 1) % dropN;
+      d.life = 1.6;
+      d.floor = floor;
+      d.p.set(ox + (Math.random() - 0.5) * 0.1, floor + 0.05, oz + (Math.random() - 0.5) * 0.1);
+      const back = -0.4 + Math.random() * 1.3, side = (Math.random() - 0.5) * 1.4;
+      d.v.set(-fx * back - fz * side, 3.0 + Math.random() * 1.8, -fz * back + fx * side).multiplyScalar(Math.sqrt(size));
+    }
+    ripple(ox, floor + 0.01, oz, 0.7 * size);
+  }
+  function stepWater(dt, steering) {
+    ripples.forEach((r) => {
+      if (!r.m.visible) return;
+      r.life -= dt * 0.9;
+      if (r.life <= 0) { r.m.visible = false; return; }
+      r.m.scale.setScalar(r.size * (0.25 + (1 - r.life) * 0.9));
+      r.m.material.opacity = r.life * 0.55;
+    });
+    DR.forEach((d, i) => {
+      if (d.life > 0) {
+        d.life -= dt;
+        d.v.y -= 9 * dt;
+        d.p.addScaledVector(d.v, dt);
+        if (d.p.y < d.floor) d.life = 0;
+        dummy.position.copy(d.p);
+        dummy.scale.setScalar(d.life > 0 ? 1 : 0.001);
+      } else {
+        dummy.position.set(0, -20, 0);
+        dummy.scale.setScalar(0.001);
+      }
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      drops.setMatrixAt(i, dummy.matrix);
+    });
+    drops.instanceMatrix.needsUpdate = true;
+    // birds standing in water sink in a little, leave ripples, and now and then start playing
+    actors.forEach((a) => {
+      if (a.scale < 0.5 || !a.b.group.visible) return;
+      const grounded = a.pos.y < 0.05 && !(a.move && a.move.type === 'fly') && !(a.isPlayer && flying);
+      const wet = grounded && waterAt(a.pos.x, a.pos.z);
+      if (grounded && !a.remote) a.pos.y = wet ? -0.1 : 0;
+      if (wet && !a.wet) {
+        ripple(a.pos.x, 0.04, a.pos.z, 1.3);
+        spray(a, 5);
+        if (a.isPlayer) { say(player, pick(['첨벙!', '물이다!', '시원해']), 1.2); if (!(a.splashAt > clock)) a.splashAt = clock + 1.3; }
+      }
+      a.wet = wet;
+      if (!wet) return;
+      const moving = !!a.move || (a.isPlayer && steering) || (a.remote && a.remote.m === 1);
+      if (clock > (a.rippleAt || 0)) { ripple(a.pos.x, 0.04, a.pos.z, moving ? 0.7 : 0.95); a.rippleAt = clock + (moving ? 0.3 : 1.5); }
+      if (a.isPlayer && !moving && !(a.action && a.action.until > clock) && clock > (a.splashAt || 0)) {
+        act(a, 'SPLASH', 3.6);
+        a.splashAt = clock + 7 + Math.random() * 4;
+      }
+    });
+  }
 
   // ---- loop ----------------------------------------------------------------------------------
   const v = new THREE.Vector3();
@@ -1481,9 +1961,15 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       else if (a.isPlayer && flying) mode = 'FLY';
       else if (a.isPlayer && steering) mode = 'WALK';
       else if (a.action && a.action.until > clock) mode = a.action.name;
-      else mode = a.isPlayer ? 'idle' : a.surface === 'branch' || a.surface === 'perch' ? 'CALM' : 'idle';
+      else mode = a.isPlayer ? 'idle' : a.surface === 'branch' || a.surface === 'perch' || a.surface === 'canopy' ? 'CALM' : 'idle';
       if (a.isPlayer) playerMode = mode;
       a.b.pose(mode, reduce ? 0 : clock + a.pitch * 7);
+      // the flick of a water game: throw the spray as the head comes up (same clock as the pose)
+      if (mode === 'SPLASH' && !reduce) {
+        const u = ((clock + a.pitch * 7) % 1.2) / 1.2;
+        if (a.splashU != null && a.splashU < 0.56 && u >= 0.56) spray(a, 22);
+        a.splashU = u;
+      } else a.splashU = null;
       a.b.group.scale.setScalar(a.scale);
       a.b.group.rotation.y = lerpAngle(a.b.group.rotation.y, a.rotTarget, 1 - Math.exp(-dt * 9));
       if (a.bubbleUntil < clock) a.bubbleEl.hidden = true;
@@ -1497,6 +1983,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       if (!r.move && !(r.action && r.action.until > clock) && r.pos.distanceTo(player.pos) < 1.8) r.rotTarget = angleTo(r.pos, player.pos);
     });
     keepApart();
+    stepWater(dt, steering);
     ticks.forEach((f) => f(clock, dt));
     if ((steering || player.move) && onGround(player.pos) && clock > rustleAt) {
       if (Math.hypot(player.pos.x - PZ.x, player.pos.z - PZ.z) < PZ.r) { say(player, '사각사각', 1.1); rustleAt = clock + 5; }

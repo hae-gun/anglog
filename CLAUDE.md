@@ -19,7 +19,7 @@
 - infra/ : 서버 구성(docker-compose: db, api, realtime, web=안쪽 프록시 web.conf), 수동 배포 스크립트(anglog-deploy), 백업. 앞단 TLS는 고해야지 app 서버의 Nginx를 같이 쓴다. API는 CORS_ALLOWED_ORIGINS의 화면 주소만 쿠키와 함께 받는다. 순서와 주의는 infra/README.md
 - frontend/ : Vite + React 18 + TS, react-router 6, three 0.128
   - src/api: types.ts(API 모양), http.ts(실서버. VITE_API_BASE가 있으면 그 주소로 credentials include, /media/ 주소도 앞에 붙임), mock.ts(가짜 서버, `npm run dev:mock`)
-  - src/room3d: 3D 방과 앵무 모델 (plain JS). scene.js 방 꾸밈, room.js 프로필 방, play.js 방에서 놀기, park.js 앵파크(가을 공원. 3인칭은 걸으면 카메라가 등 뒤로 따라 돌고, 버튼으로 1인칭 전환)
+  - src/room3d: 3D 방과 앵무 모델 (plain JS). scene.js 방 꾸밈, room.js 프로필 방, play.js 방에서 놀기, park.js 앵파크(가을 공원과 강가 산책로. 앉을 곳은 모두 perchSegs, 걸을 수 있는 곳은 walkable, 물은 waterAt. 3인칭은 걸으면 카메라가 등 뒤로 따라 돌고, 버튼으로 1인칭 전환)
   - src/lib/photoColors.ts: 앵무 색 고르기에서 사진(고르기, 붙여넣기, 끌어놓기)으로 종을 추정하고 부위별 색을 뽑는다. 이 기기에서만 색 계산(배경 지우기, Lab k-means, 색 조합으로 종 점수)하고 사진은 올리지 않는다. 그림 인식이 아니라 색 추론이라 결과는 추정으로 보여 준다
   - src/lib/parkNet.ts: 앵파크 실시간 클라이언트. VITE_REALTIME_URL이 없으면 dev에서는 ws://localhost:8090/ws, 가짜 서버 모드와 운영에서는 혼자 노는 모드
   - 첫 화면(/)은 누구에게나 앵파크(/park). 피드는 /feed. /park는 전체 화면 게임(헤더와 하단 메뉴 없음)
