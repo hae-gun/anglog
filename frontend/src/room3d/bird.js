@@ -85,6 +85,7 @@ function blob(parent, hex, x, y, z, sx, sy, sz, rz, line, geo = SPH) {
 }
 
 const tmpV = new THREE.Vector3();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // folded wings lie along the back
 const WZ = -0.06;
 // body center height: a little leg shows under the belly
@@ -396,9 +397,99 @@ export function makeBird(colors, species) {
     });
   }
 
-  /** Pose for a mood or an action. t = seconds. */
-  function pose(mood, t) {
+  /** Spreads just one wing (a stretch), the other stays folded. */
+  function wingOne(i, spread, flap) {
+    const w = wings[i], s = i ? 1 : -1;
+    qa.setFromAxisAngle(AX, -s * flap);
+    qb.setFromAxisAngle(AY, s * spread);
+    qc.setFromAxisAngle(AX, -s * (Math.PI / 2) * Math.min(1, spread / 1.2) * 0.6);
+    qd.setFromAxisAngle(AZ, WZ);
+    w.quaternion.copy(qa).multiply(qb).multiply(qc).multiply(qd);
+  }
+  const hash = (x) => { const v = Math.sin(x * 12.9898 + phase * 78.233) * 43758.5453; return v - Math.floor(v); };
+  /**
+   * The head turn that puts one eye towards a target at local yaw `look` (0 = straight ahead),
+   * the way parrots look at things: side-on, with one eye. Picks the eye that needs the smaller turn.
+   */
+  function eyeTurn(look, other) {
+    const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+    const a = wrap(Math.PI / 2 - look), b = wrap(look - Math.PI / 2);
+    const [near, far] = Math.abs(a) < Math.abs(b) ? [a, b] : [b, a];
+    const pickA = other && Math.abs(far) < 1.7 ? far : near;
+    return clamp(pickA, -1.5, 1.5);
+  }
+  // 애교 (bowing the head for a scratch), shared by the idle fidget and the BEG action
+  function beg(e, s, tt) {
+    head.rotation.z = -0.75 * e;
+    head.rotation.x = s * 0.3 * e;
+    head.scale.setScalar(S.headR * (1 + 0.07 * e));
+    inner.rotation.x = Math.sin(tt * 3) * 0.05 * e;
+    if (head.userData.crest) head.userData.crest.rotation.z = 0.4 * e;
+    return e > 0.5 ? 0.35 : 1;
+  }
+  // what an idle bird does: every few seconds one small thing, the way real parrots never sit quite still
+  const FIDGETS = ['calm', 'side', 'tilt', 'bob', 'fluff', 'side', 'stretch', 'beg', 'calm', 'yawn', 'tilt', 'side'];
+  function idle(tt, look, eyeY) {
+    const SEG = 3.4, seg = Math.floor(tt / SEG), u = tt / SEG - seg;
+    const kind = FIDGETS[Math.floor(hash(seg) * FIDGETS.length)];
+    const s = hash(seg + 0.5) < 0.5 ? 1 : -1;
+    const e = clamp(Math.min(u / 0.18, (1 - u) / 0.18), 0, 1); // ease in and out of each fidget
+    const bump = Math.sin(Math.PI * u);
+    inner.position.y = Math.sin(tt * 2.2) * 0.015;
+    switch (kind) {
+      case 'side': {
+        // one eye on you, then a quick switch to the other eye
+        const second = u > 0.55;
+        const yaw = look != null ? eyeTurn(look, second) : (second ? -s : s) * 1.3;
+        head.rotation.y = yaw * e;
+        head.rotation.x = -Math.sign(yaw) * 0.22 * e;
+        head.rotation.z = 0.08 * e;
+        break;
+      }
+      case 'tilt':
+        // a curious head tilt
+        head.rotation.x = s * 0.5 * e;
+        head.rotation.z = 0.15 * e;
+        if (look != null) head.rotation.y = clamp(look, -0.8, 0.8) * 0.6 * e;
+        break;
+      case 'bob':
+        head.position.y = hy + Math.abs(Math.sin(u * Math.PI * 6)) * 0.06 * e;
+        head.rotation.z = Math.sin(u * Math.PI * 6) * 0.15 * e;
+        break;
+      case 'fluff': {
+        // puff up, then a quick shake to settle the feathers
+        inner.scale.set(1 + 0.1 * e, 1 + 0.07 * e, 1 + 0.12 * e);
+        if (u > 0.68 && u < 0.84) inner.rotation.x = Math.sin(u * 220) * 0.2;
+        if (e > 0.6 && u < 0.68) eyeY = Math.min(eyeY, 0.55);
+        break;
+      }
+      case 'stretch':
+        // one wing stretched down and back, the head up
+        wingOne(s > 0 ? 1 : 0, 0.75 * e, -0.35 * e);
+        head.rotation.z = 0.2 * e;
+        break;
+      case 'beg':
+        eyeY = Math.min(eyeY, beg(e, s, tt));
+        break;
+      case 'yawn':
+        beak.scale.set(1, 1 + 0.8 * bump * e, 1 + 0.2 * bump * e);
+        head.rotation.z = 0.35 * bump * e;
+        eyeY = Math.min(eyeY, 1 - 0.85 * bump * e);
+        break;
+      default:
+        head.rotation.z = Math.sin(tt * 0.7) * 0.1;
+        head.rotation.y = look != null ? clamp(look, -0.7, 0.7) * 0.5 : Math.sin(tt * 0.45) * 0.35;
+    }
+    return eyeY;
+  }
+
+  /**
+   * Pose for a mood or an action. t = seconds.
+   * look (optional): local yaw towards something worth watching (the camera, a nearby bird).
+   */
+  function pose(mood, t, look) {
     const tt = t + phase;
+    head.scale.setScalar(S.headR);
     inner.position.set(0, 0, 0);
     inner.rotation.set(0, 0, 0);
     inner.scale.set(1, 1, 1);
@@ -499,10 +590,22 @@ export function makeBird(colors, species) {
         head.position.x = hx + 0.08 * k;
         break;
       }
+      case 'PETTED': {
+        // being scratched: head offered sideways, eyes shut with pleasure, feathers fluffed
+        head.rotation.z = -0.5;
+        head.rotation.x = 0.35 + Math.sin(tt * 7) * 0.12;
+        head.scale.setScalar(S.headR * 1.08);
+        inner.scale.set(1.06, 1.04, 1.06);
+        inner.rotation.x = Math.sin(tt * 5) * 0.06;
+        if (head.userData.crest) head.userData.crest.rotation.z = 0.35;
+        eyeY = 0.15;
+        break;
+      }
+      case 'BEG':
+        eyeY = Math.min(eyeY, beg(1, 1, tt));
+        break;
       default:
-        inner.position.y = Math.sin(tt * 2.2) * 0.015;
-        head.rotation.z = Math.sin(tt * 0.7) * 0.1;
-        head.rotation.y = Math.sin(tt * 0.45) * 0.35;
+        eyeY = idle(tt, look, eyeY);
     }
     eyes.forEach((e) => e.scale.set(1, eyeY, 1));
   }

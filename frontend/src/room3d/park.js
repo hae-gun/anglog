@@ -1625,6 +1625,10 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
 
   function tap(cx, cy) {
     pointerRay(cx, cy);
+    if (player.b.group.visible && view !== 'first' && !flying && ray.intersectObject(player.b.group, true).length) {
+      petPlayer();
+      return;
+    }
     const others = actors.filter((a) => a !== player && a.b.group.visible);
     const birdHit = ray.intersectObjects(others.map((x) => x.b.group), true)[0];
     if (birdHit) {
@@ -1635,7 +1639,10 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
           if (spot.surface === 'swing') player.swingDx = spot.dx;
           faceEachOther(player, other);
           if (!other.remote) {
-            act(other, 'CHIRP', 0.7);
+            // a friendly hello: the other bird offers its head, like parrots preening each other
+            act(other, Math.random() < 0.5 ? 'PETTED' : 'CHIRP', 1.8);
+            act(player, 'CHIRP', 0.7);
+            heartsAt(other, 3);
             say(other, pick(HELLO));
             playCall('chirp', other.pitch, loudness(other));
           }
@@ -1811,6 +1818,86 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   }
   stepCamera(0, true);
 
+  // ---- small cute things: side-eye looks, being petted, hearts ---------------------------------
+  const wrapA = (x) => Math.atan2(Math.sin(x), Math.cos(x));
+  /** Local yaw from a bird to what it would like to watch: you (the camera) for your own bird, you for birds nearby. */
+  function lookFor(a) {
+    let tx, tz;
+    if (a.isPlayer) {
+      if (view === 'first') return undefined;
+      tx = camera.position.x; tz = camera.position.z;
+    } else if (player.b.group.visible && a.pos.distanceTo(player.pos) < 5) {
+      tx = player.pos.x; tz = player.pos.z;
+    } else return undefined;
+    return wrapA(Math.atan2(-(tz - a.pos.z), tx - a.pos.x) - a.b.group.rotation.y);
+  }
+  const heartTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = '#FF6F91';
+    g.beginPath();
+    g.moveTo(32, 56);
+    g.bezierCurveTo(4, 36, 6, 10, 22, 10);
+    g.bezierCurveTo(28, 10, 32, 15, 32, 19);
+    g.bezierCurveTo(32, 15, 36, 10, 42, 10);
+    g.bezierCurveTo(58, 10, 60, 36, 32, 56);
+    g.fill();
+    return new THREE.CanvasTexture(c);
+  })();
+  const heartSprites = Array.from({ length: 14 }, () => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: heartTex, transparent: true, depthWrite: false }));
+    sp.visible = false;
+    scene.add(sp);
+    return { sp, life: 0, vx: 0, vz: 0 };
+  });
+  let heartNext = 0;
+  function heartsAt(a, n = 4) {
+    const top = (a.b.size || 1) * a.scale * 1.15;
+    for (let k = 0; k < n; k++) {
+      const h = heartSprites[heartNext];
+      heartNext = (heartNext + 1) % heartSprites.length;
+      h.sp.position.set(a.pos.x + (Math.random() - 0.5) * 0.4, a.pos.y + top + k * 0.12, a.pos.z + (Math.random() - 0.5) * 0.4);
+      h.vx = (Math.random() - 0.5) * 0.4;
+      h.vz = (Math.random() - 0.5) * 0.4;
+      h.life = 1.4 + k * 0.15;
+      h.sp.visible = true;
+    }
+  }
+  function stepHearts(dt) {
+    heartSprites.forEach((h) => {
+      if (!h.sp.visible) return;
+      h.life -= dt;
+      if (h.life <= 0) { h.sp.visible = false; return; }
+      h.sp.position.x += h.vx * dt;
+      h.sp.position.z += h.vz * dt;
+      h.sp.position.y += 0.7 * dt;
+      const k = Math.min(1, h.life / 0.5);
+      h.sp.material.opacity = k;
+      h.sp.scale.setScalar(0.42 * (0.6 + 0.4 * Math.min(1, (1.6 - h.life) * 4)));
+    });
+  }
+  const PETTED = ['헤헤', '좋아', '더 해줘', '거기거기', '사르르'];
+  /** Your own bird, tapped: it leans into the scratch. */
+  function petPlayer() {
+    act(player, 'PETTED', 2.4);
+    heartsAt(player, 4);
+    say(player, pick(PETTED), 1.4);
+    playCall('chirp', player.pitch * 1.15, 0.25);
+    player.begCount = 99; // no need to ask any more, they know
+  }
+  // a bird that has been still for a while bows its head now and then: a hint that it can be petted
+  function stepBeg() {
+    if (player.move || flying || (player.action && player.action.until > clock) || player.wet || view === 'first') { player.stillSince = clock; return; }
+    if (clock - (player.stillSince ?? clock) > 12 && (player.begCount || 0) < 3 && clock > (player.begAt || 0)) {
+      act(player, 'BEG', 3);
+      say(player, '쓰담쓰담 해줘', 2.2);
+      player.begCount = (player.begCount || 0) + 1;
+      player.begAt = clock + 40;
+      player.stillSince = clock;
+    }
+  }
+
   // ---- water play: ripples where birds stand in water, and the spray when they flick it up ---------
   const ripples = Array.from({ length: 18 }, () => {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
@@ -1963,7 +2050,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       else if (a.action && a.action.until > clock) mode = a.action.name;
       else mode = a.isPlayer ? 'idle' : a.surface === 'branch' || a.surface === 'perch' || a.surface === 'canopy' ? 'CALM' : 'idle';
       if (a.isPlayer) playerMode = mode;
-      a.b.pose(mode, reduce ? 0 : clock + a.pitch * 7);
+      a.b.pose(mode, reduce ? 0 : clock + a.pitch * 7, mode === 'idle' || mode === 'CALM' ? lookFor(a) : undefined);
       // the flick of a water game: throw the spray as the head comes up (same clock as the pose)
       if (mode === 'SPLASH' && !reduce) {
         const u = ((clock + a.pitch * 7) % 1.2) / 1.2;
@@ -1984,6 +2071,9 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     });
     keepApart();
     stepWater(dt, steering);
+    stepHearts(dt);
+    if (steering) player.stillSince = clock;
+    stepBeg();
     ticks.forEach((f) => f(clock, dt));
     if ((steering || player.move) && onGround(player.pos) && clock > rustleAt) {
       if (Math.hypot(player.pos.x - PZ.x, player.pos.z - PZ.z) < PZ.r) { say(player, '사각사각', 1.1); rustleAt = clock + 5; }
