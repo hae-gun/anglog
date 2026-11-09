@@ -200,7 +200,8 @@ function compact(obj) {
  */
 export function makeBird(colors, species, opts = {}) {
   const c = colors;
-  const S = SHAPES[species] || SHAPES.OTHER;
+  // opts.shape overrides parts of the species shape (used to try out variations)
+  const S = { ...(SHAPES[species] || SHAPES.OTHER), ...(opts.shape || {}) };
   const wingC = c.wing;
   const midC = shade(wingC, 0.82);
   const flightC = S.flight ? mix(shade(wingC, 0.75), S.flight, 0.7) : shade(wingC, 0.68);
@@ -361,6 +362,7 @@ export function makeBird(colors, species, opts = {}) {
   } else if (species === 'LOVEBIRD' || species === 'OTHER') {
     [-1, 1].forEach((s) => blob(head, '#FF9C9C', 0.2, -0.02, 0.27 * s, 0.075, 0.045, 0.03));
   } else if (species === 'RINGNECK') {
+    if (opts.blush) [-1, 1].forEach((s) => blob(head, '#FF9C9C', 0.2, -0.04, 0.27 * s, 0.07, 0.04, 0.03));
     // a soft wash over the nape (blue-lavender on a green bird; the head color from the customizer)
     blob(head, c.head, -0.13, 0.08, 0, 0.25, 0.25, 0.31, 0.3);
     if (opts.ring !== false) {
