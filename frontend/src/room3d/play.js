@@ -2,7 +2,7 @@
 // Tap the floor to walk, tap the perch/shelf/sill/scale to fly there, tap a bird to go say hi.
 // The host birds live their own little lives (perch, wander, come over) and answer when spoken to.
 import * as THREE from 'three';
-import { playCall } from '../lib/sound';
+import { playCall, playFx } from '../lib/sound';
 import { makeBird } from './bird.js';
 import { buildRoomScene, D, disposeScene, featherMesh, PERCH, W } from './scene.js';
 
@@ -44,7 +44,7 @@ function floorPoint(x, z) {
  */
 export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
   const built = buildRoomScene(room);
-  const { scene, env, frameHits, landables } = built;
+  const { scene, env, frameHits, landables, toys } = built;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.innerWidth < 720 ? 1.5 : 2));
   renderer.outputEncoding = THREE.sRGBEncoding;
@@ -220,11 +220,103 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
     }
   }
 
+  // ---- toys: the bell under the perch, the mirror -------------------------------------
+  const bell = toys.bell;
+  function ring(times = 3) {
+    for (let k = 0; k < times; k++) {
+      setTimeout(() => {
+        if (gone) return;
+        bell.vel += (k % 2 ? -1 : 1) * 2.6;
+        bell.velX += (Math.random() - 0.5) * 1.2;
+        playFx('bell', 0.35);
+      }, k * 330);
+    }
+  }
+  function stepToys(dt) {
+    // a damped pendulum, both ways
+    bell.vel += (-18 * bell.swing - 1.6 * bell.vel) * dt;
+    bell.swing += bell.vel * dt;
+    bell.velX += (-18 * bell.swingX - 1.6 * bell.velX) * dt;
+    bell.swingX += bell.velX * dt;
+    bell.pivot.rotation.set(bell.swingX, 0, bell.swing);
+  }
+  const MIRROR_LINES = ['누구야?', '거울 속에 나다', '안녕 나야!', '너 귀엽다'];
+  /** Play with a toy once you are at it. */
+  function playToy(a, toy) {
+    if (toy === 'bell') {
+      a.rotTarget = 0;
+      act(a, 'PECK', 1.4);
+      ring(3);
+      say(a, '딸랑딸랑', 1.4);
+    } else if (toy === 'mirror' && toys.mirror) {
+      a.rotTarget = angleTo(a.pos, toys.mirror.face);
+      act(a, 'SING', 3);
+      say(a, pick(MIRROR_LINES), 1.8);
+      [0, 600, 1300].forEach((ms) => setTimeout(() => { if (!gone) playCall('chirp', a.pitch, a.isPlayer ? 0.8 : loudness(a)); }, ms));
+    }
+  }
+  let gone = false;
+  // the mirror: render the birds, the floor and the ball from the mirrored camera into a texture,
+  // and project it onto the glass. Only layer 1 shows up in it (walls would block the mirrored view).
+  let mirror = null;
+  if (toys.mirror) {
+    const rt = new THREE.WebGLRenderTarget(512, 512);
+    const texMat = new THREE.Matrix4();
+    const glassMat = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: rt.texture }, textureMatrix: { value: texMat }, tint: { value: new THREE.Color(0xe3ecef) } },
+      vertexShader: 'uniform mat4 textureMatrix; varying vec4 vUv; void main() { vUv = textureMatrix * modelMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform sampler2D tDiffuse; uniform vec3 tint; varying vec4 vUv; void main() { vec4 c = texture2DProj(tDiffuse, vUv); gl_FragColor = linearToOutputTexel(vec4(c.rgb * tint, 1.0)); }',
+    });
+    toys.mirror.glass.material.dispose();
+    toys.mirror.glass.material = glassMat;
+    const floorCopy = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ color: new THREE.Color('#E3C29A').convertSRGBToLinear(), roughness: 0.9 }));
+    floorCopy.rotation.x = -Math.PI / 2;
+    floorCopy.position.set(W / 2, 0.001, D / 2);
+    floorCopy.layers.set(1);
+    scene.add(floorCopy);
+    scene.traverse((o) => { if (o.isLight) o.layers.enable(1); });
+    ball.layers.enable(1);
+    const cam2 = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+    cam2.layers.set(1);
+    mirror = { rt, texMat, cam2, glassMat, floorCopy, z: toys.mirror.z, birdsOn: new WeakSet() };
+  }
+  const bias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+  const refl = new THREE.Vector3();
+  function renderMirror() {
+    if (!mirror) return;
+    actors.forEach((a) => { if (!mirror.birdsOn.has(a.b.group)) { a.b.group.traverse((o) => o.layers.enable(1)); mirror.birdsOn.add(a.b.group); } });
+    const { cam2, z } = mirror;
+    cam2.left = camera.left; cam2.right = camera.right; cam2.top = camera.top; cam2.bottom = camera.bottom;
+    cam2.near = camera.near; cam2.far = camera.far;
+    cam2.updateProjectionMatrix();
+    cam2.position.copy(camera.position);
+    cam2.position.z = 2 * z - camera.position.z;
+    refl.copy(look);
+    refl.z = 2 * z - look.z;
+    cam2.up.set(0, 1, 0);
+    cam2.lookAt(refl);
+    cam2.updateMatrixWorld();
+    mirror.texMat.copy(bias).multiply(cam2.projectionMatrix).multiply(cam2.matrixWorldInverse);
+    toys.mirror.glass.visible = false;
+    renderer.setRenderTarget(mirror.rt);
+    renderer.clear();
+    renderer.render(scene, cam2);
+    renderer.setRenderTarget(null);
+    toys.mirror.glass.visible = true;
+  }
+
   // ---- host life -------------------------------------------------------------
   function think(h) {
     if (h.move || (h.action && h.action.until > clock)) return;
     const d = h.pos.distanceTo(player.pos);
     const r = Math.random();
+    if (r < 0.16) {
+      // off to play with a toy
+      const toy = toys.mirror && Math.random() < 0.5 ? 'mirror' : 'bell';
+      const at = toy === 'bell' ? bell.spot.clone() : toys.mirror.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0, 0));
+      flyTo(h, at, toy === 'bell' ? 'perch' : 'floor', () => playToy(h, toy));
+      return;
+    }
     if (d > 4 && r < 0.35) {
       const spot = besides(player);
       flyTo(h, spot.p, spot.surface, () => { faceEachOther(h, player); say(h, pick(HELLO)); playCall('chirp', h.pitch, loudness(h)); });
@@ -314,14 +406,15 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
     }
     let target, surface = 'floor';
     const hit = ray.intersectObjects(landables, false)[0];
-    if (hit) { const L = hit.object.userData.land(hit.point); target = L.p; surface = L.surface; }
+    let toy = null;
+    if (hit) { const L = hit.object.userData.land(hit.point); target = L.p; surface = L.surface; toy = L.toy || null; }
     else {
       const p = new THREE.Vector3();
       if (!ray.ray.intersectPlane(floorPlane, p)) return;
       target = floorPoint(p.x, p.z);
     }
     player.action = null;
-    goTo(player, target, surface, null);
+    goTo(player, target, surface, toy ? () => playToy(player, toy) : null);
     marker.position.set(target.x, target.y + 0.03, target.z);
     markerT = clock;
   };
@@ -366,10 +459,12 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
     });
     keepApart();
     stepBall(dt);
+    stepToys(dt);
     stepParticles(dt);
     stepCamera(dt);
     marker.material.opacity = Math.max(0, 0.8 - (clock - markerT) * 1.4);
     marker.scale.setScalar(1 + (clock - markerT) * 0.8);
+    renderMirror();
     renderer.render(scene, camera);
     actors.forEach((a) => { const up = 0.3 + 1.1 * (a.b.size || 1); place(a.tagEl, a.pos, up); place(a.bubbleEl, a.pos, up); });
   }
@@ -433,6 +528,8 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
       playCall('chirp', 1, 0.8);
     },
     dispose() {
+      gone = true;
+      if (mirror) { mirror.rt.dispose(); mirror.glassMat.dispose(); }
       cancelAnimationFrame(raf);
       ro.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onDown);

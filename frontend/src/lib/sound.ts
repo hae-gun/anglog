@@ -58,3 +58,58 @@ export function setMuted(m: boolean) {
     /* storage optional */
   }
 }
+
+// small synthesized sounds (no files): a toy bell, seeds being cracked, a splash of water
+let ctx: AudioContext | null = null;
+function audio(): AudioContext | null {
+  try {
+    if (!ctx) {
+      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+    }
+    if (ctx.state === 'suspended') void ctx.resume();
+    return ctx;
+  } catch {
+    return null;
+  }
+}
+function noise(c: AudioContext, sec: number) {
+  const buf = c.createBuffer(1, Math.ceil(c.sampleRate * sec), c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  return src;
+}
+export type Fx = 'bell' | 'crunch' | 'splash';
+export function playFx(kind: Fx, volume = 0.5) {
+  if (muted) return;
+  const c = audio();
+  if (!c) return;
+  const t = c.currentTime, out = c.createGain();
+  out.connect(c.destination);
+  out.gain.value = Math.max(0, Math.min(1, volume));
+  if (kind === 'bell') {
+    // two bright partials ringing out
+    [[2350, 0.5, 1.1], [3520, 0.25, 0.6], [5100, 0.12, 0.35]].forEach(([f, g, len]) => {
+      const o = c.createOscillator(), e = c.createGain();
+      o.type = 'sine';
+      o.frequency.value = f * (0.98 + Math.random() * 0.04);
+      e.gain.setValueAtTime(g, t);
+      e.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      o.connect(e).connect(out);
+      o.start(t);
+      o.stop(t + len);
+    });
+  } else {
+    const len = kind === 'crunch' ? 0.06 : 0.35;
+    const src = noise(c, len), f = c.createBiquadFilter(), e = c.createGain();
+    f.type = kind === 'crunch' ? 'highpass' : 'bandpass';
+    f.frequency.value = kind === 'crunch' ? 2500 : 900;
+    e.gain.setValueAtTime(kind === 'crunch' ? 0.6 : 0.5, t);
+    e.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    src.connect(f).connect(e).connect(out);
+    src.start(t);
+  }
+}

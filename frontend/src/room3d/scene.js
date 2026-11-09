@@ -207,6 +207,34 @@ export function buildRoomScene(room) {
     scene.add(m);
   });
 
+  // toys: a bell hanging under the perch for everyone, and a mirror once the owner has written 3 diaries
+  const metal = new THREE.MeshStandardMaterial({ color: toLinear('#E7B83C'), metalness: 0.55, roughness: 0.3 });
+  const bellPivot = new THREE.Group();
+  bellPivot.position.set(9.1, PERCH.y - 0.07, PERCH.z);
+  scene.add(bellPivot);
+  const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.42, 6), mat('#A9A296'));
+  chain.position.y = -0.21;
+  bellPivot.add(chain);
+  const bellBody = new THREE.Mesh(new THREE.LatheGeometry([[0.001, 0.2], [0.07, 0.19], [0.11, 0.12], [0.13, 0.02], [0.16, -0.02], [0.001, -0.02]].map(([x, y]) => new THREE.Vector2(x, y)), 16), metal);
+  bellBody.position.y = -0.62;
+  bellBody.castShadow = true;
+  bellPivot.add(bellBody);
+  const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), metal);
+  clapper.position.y = -0.66;
+  bellPivot.add(clapper);
+  const bellSpot = new THREE.Vector3(9.1, PERCH.y + 0.08, PERCH.z);
+  const toys = { bell: { pivot: bellPivot, spot: bellSpot, swing: 0, vel: 0, swingX: 0, velX: 0 }, mirror: null };
+  if ((room.stats?.postCount ?? 0) >= 3) {
+    const mx = 2.6;
+    box(scene, mx - 0.56, 0.12, 0.0, mx + 0.56, 1.58, 0.07, '#B98552');
+    // plain silver here; play.js turns it into a real mirror (birds, the floor and the ball reflected)
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 1.3), new THREE.MeshStandardMaterial({ color: toLinear('#CFD8DC'), metalness: 0.6, roughness: 0.15 }));
+    glass.position.set(mx, 0.85, 0.075);
+    scene.add(glass);
+    box(scene, mx - 0.45, 0, 0.05, mx + 0.45, 0.12, 0.35, '#9C7048');
+    toys.mirror = { spot: new THREE.Vector3(mx, 0, 0.95), face: new THREE.Vector3(mx, 0, 0), glass, z: 0.075 };
+  }
+
   // the owner's birds on the perch, facing the viewer
   const hosts = (room.parrots || []).slice(0, 4).map((p, i) => {
     const b = makeBird(p.colors, p.species);
@@ -235,10 +263,13 @@ export function buildRoomScene(room) {
     (pt) => ({ p: new THREE.Vector3(THREE.MathUtils.clamp(pt.x, 1.0, 4.4), 3.7, 0.32), surface: 'shelf' }));
   surface(new THREE.BoxGeometry(4.0, 0.25, 0.5), new THREE.Vector3(7.6, 1.62, 0.0),
     (pt) => ({ p: new THREE.Vector3(THREE.MathUtils.clamp(pt.x, 5.8, 9.4), 1.62, 0.05), surface: 'sill' }));
+  surface(new THREE.BoxGeometry(0.5, 0.75, 0.5), new THREE.Vector3(bellSpot.x, PERCH.y - 0.55, PERCH.z),
+    () => ({ p: bellSpot.clone(), surface: 'perch', toy: 'bell' }));
+  if (toys.mirror) surface(new THREE.BoxGeometry(1.1, 1.5, 0.4), new THREE.Vector3(2.6, 0.8, 0.25), () => ({ p: toys.mirror.spot.clone(), surface: 'floor', toy: 'mirror' }));
   surface(new THREE.BoxGeometry(1.2, 0.3, 1.0), new THREE.Vector3(4, 0.12, 6.7),
     (pt) => ({ p: new THREE.Vector3(THREE.MathUtils.clamp(pt.x, 3.6, 4.4), 0.18, THREE.MathUtils.clamp(pt.z, 6.4, 7.0)), surface: 'scale' }));
 
-  return { scene, env, sun, lamp, frameHits, hosts, landables, hasWeight, weightAnchor: new THREE.Vector3(4, 0.2, 6.7) };
+  return { scene, env, sun, lamp, frameHits, hosts, landables, toys, hasWeight, weightAnchor: new THREE.Vector3(4, 0.2, 6.7) };
 }
 
 export function disposeScene(scene) {

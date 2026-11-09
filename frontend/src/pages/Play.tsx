@@ -122,6 +122,8 @@ export function PlayPage() {
           <p className="play-hint">
             바닥을 누르면 걸어가고, 횃대나 선반을 누르면 날아가요.
             {hostName ? ` ${hostName}를 누르면 인사해요.` : ''}
+            {' 방울을 누르면 딸랑딸랑 놀아요.'}
+            {r.relation.isMe && r.stats.postCount < 3 ? ` 일기를 ${3 - r.stats.postCount}편 더 쓰면 거울이 생겨요.` : ''}
           </p>
         )}
         {!me_bird && (

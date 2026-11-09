@@ -4,7 +4,7 @@
 // Neighbours' birdhouses stand around the ring path; their birds live here as little AIs, so the park
 // is never empty. Other people connected at the same time show up as remote birds (see lib/parkNet.ts).
 import * as THREE from 'three';
-import { playCall } from '../lib/sound';
+import { playCall, playFx } from '../lib/sound';
 import { makeBird, toLinear } from './bird.js';
 import { disposeScene, mat, rod, skyNow } from './scene.js';
 
@@ -47,6 +47,20 @@ function mulberry(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+/**
+ * Today's weather in the park, the same for everyone (from the date in Korea):
+ * rain some days, the first snow now and then in November, more snow in winter.
+ */
+function todayWeather() {
+  const d = new Date(Date.now() + 9 * 3600 * 1000);
+  const key = d.toISOString().slice(0, 10);
+  let h = 2166136261;
+  for (const ch of key) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const r = ((h >>> 0) % 1000) / 1000, m = d.getUTCMonth() + 1;
+  if (m === 12 || m <= 2) return r < 0.45 ? 'snow' : r < 0.52 ? 'rain' : 'clear';
+  if (m === 11) return r < 0.12 ? 'snow' : r < 0.3 ? 'rain' : 'clear';
+  return r < 0.22 ? 'rain' : 'clear';
+}
 const tint = (hex, toward, k) => '#' + new THREE.Color(hex).lerp(new THREE.Color(toward), k).getHexString();
 const at = (a, r) => new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r);
 /** Smallest difference between two angles. */
@@ -71,14 +85,25 @@ const SLOT_ANGLES = (() => {
 export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot } = /** @type {any} */ ({})) {
   const env = skyNow();
   const small = Math.min(window.innerWidth, window.innerHeight) < 720;
+  // ?night=1 and ?weather=rain|snow|clear try out the other looks (for checking, and for fun)
+  const q = new URLSearchParams(window.location.search);
+  if (q.get('night') === '1') Object.assign(env, { sky: '#1B2547', light: 0.45, night: true, clear: '#1B2036' });
+  const weather = ['rain', 'snow', 'clear'].includes(q.get('weather') || '') ? q.get('weather') : todayWeather();
+  const wet = weather === 'rain', snowy = weather === 'snow';
   // sky: a gradient dome from a warm autumn horizon to the top, by the time of day in Korea
   const SKY = env.night ? ['#0B1230', '#2B355E']
     : env.sky === '#F4A97A' ? ['#6A73B0', '#F6B183']
       : env.sky === '#C9B8D8' ? ['#8C8FC4', '#EBC9D2']
         : ['#6FA8DC', '#F4DFC2'];
+  if (wet || snowy) {
+    // an overcast sky: grey for rain, pale for snow
+    const over = wet ? (env.night ? '#20242E' : '#8E98A6') : env.night ? '#3A4256' : '#DCE1E8';
+    SKY[0] = tint(SKY[0], over, 0.7);
+    SKY[1] = tint(SKY[1], over, 0.7);
+  }
   const skyC = SKY[1];
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(toLinear(skyC), 45, 175);
+  scene.fog = new THREE.Fog(toLinear(skyC), wet || snowy ? 26 : 45, wet || snowy ? 120 : 175);
   const renderer = new THREE.WebGLRenderer({ antialias: !small });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, small ? 1.5 : 2));
   renderer.outputEncoding = THREE.sRGBEncoding;
@@ -100,8 +125,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   };
 
   // ---- light ---------------------------------------------------------------------
-  scene.add(new THREE.HemisphereLight(0xfff2dd, 0x6f7a4a, env.night ? 0.42 : 0.62));
-  const sun = new THREE.DirectionalLight(env.night ? 0x9fb4ff : 0xffe2b8, env.night ? 0.5 : Math.min(env.light, 0.95));
+  scene.add(new THREE.HemisphereLight(0xfff2dd, 0x6f7a4a, (env.night ? 0.42 : 0.62) * (wet ? 0.95 : snowy ? 1.15 : 1)));
+  const sun = new THREE.DirectionalLight(env.night ? 0x9fb4ff : 0xffe2b8, (env.night ? 0.5 : Math.min(env.light, 0.95)) * (wet || snowy ? 0.5 : 1));
   sun.castShadow = true;
   sun.shadow.mapSize.set(small ? 1024 : 2048, small ? 1024 : 2048);
   Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 70 });
@@ -112,7 +137,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
 
   // ---- ground, paths, horizon -------------------------------------------------------------
-  const meadow = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), mat(env.night ? '#4E5A34' : '#8A9A50'));
+  const SNOW = env.night ? '#AEB7C8' : '#F1F3F5';
+  const meadow = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), mat(snowy ? tint(env.night ? '#4E5A34' : '#8A9A50', SNOW, 0.75) : env.night ? '#4E5A34' : '#8A9A50'));
   meadow.rotation.x = -Math.PI / 2;
   meadow.position.y = -0.04;
   scene.add(meadow);
@@ -130,6 +156,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const cc = gA.clone().lerp(gB, clamp(0.5 + n, 0, 1));
     if (n > 0.35) cc.lerp(gC, Math.min(0.6, (n - 0.35) * 1.8));
     cc.lerp(gM, clamp((Math.hypot(x, z) - PARK_R) / 5, 0, 1));
+    if (snowy) cc.lerp(new THREE.Color(SNOW), 0.62 + n * 0.25); // a thin first snow, the grass showing through
     cc.convertSRGBToLinear();
     lawnCols.push(cc.r, cc.g, cc.b);
   }
@@ -160,7 +187,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
     dome.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xfff6d8, size: 1.6, sizeAttenuation: false, fog: false })));
   }
-  const pathMat = mat(env.night ? '#9C8F74' : '#E6D3AE');
+  const pathMat = mat(snowy ? tint(env.night ? '#9C8F74' : '#E6D3AE', SNOW, 0.6) : wet ? tint(env.night ? '#9C8F74' : '#E6D3AE', '#7A6E5C', 0.3) : env.night ? '#9C8F74' : '#E6D3AE');
   const plaza = new THREE.Mesh(new THREE.CircleGeometry(5.2, 40), pathMat);
   plaza.rotation.x = -Math.PI / 2;
   plaza.position.y = 0.012;
@@ -275,6 +302,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   });
   const deepLine = (x) => riverZ(x) + RIVER_W - 2.4;
   const bridges = []; // { x, z, r } the stream is dry under these
+  const puddles = []; // { x, z, r } rain puddles on the paths (rainy days only)
   const outsidePark = (x, z) => Math.hypot(x, z) > PARK_R + 1;
   const inZone = (x, z, pad) => Object.values(ZONES).some((q) => Math.hypot(x - q.x, z - q.z) < q.r + pad)
     || streamPts.some((q) => Math.hypot(x - q.x, z - q.z) < pad + 0.8);
@@ -875,7 +903,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
         dummy.scale.setScalar(c.r);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
-        mesh.setColorAt(i, col.set(c.color).convertSRGBToLinear());
+        mesh.setColorAt(i, col.set(snowy ? tint(c.color, SNOW, 0.28) : c.color).convertSRGBToLinear());
         occludeSpheres.push({ x: c.x, y: c.y, z: c.z, r: c.r * (c.cone ? 0.8 : 0.92) });
       });
       mesh.castShadow = true;
@@ -1114,6 +1142,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   /** Shallow water you can stand in: the pond's edge, the stream, the river by the beaches. */
   function waterAt(x, z) {
     if (Math.hypot(x - POND.x, z - POND.z) < POND.r - 0.15) return true;
+    if (puddles.some((p) => Math.hypot(x - p.x, z - p.z) < p.r)) return true;
     if (Math.abs(z - riverZ(x)) < RIVER_W - 0.1) return true;
     if (z < -15 && z > -52 && x > -19 && x < 19 && !bridges.some((b) => Math.hypot(x - b.x, z - b.z) < b.r)) {
       for (const q of streamPts) if ((q.x - x) ** 2 + (q.z - z) ** 2 < 0.56) return true;
@@ -1357,7 +1386,9 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   let entering = null;
   function think(r) {
     if (r.move || (r.action && r.action.until > clock)) return;
-    const x = Math.random();
+    // at night most birds stay asleep where they are, and the ones awake look for a branch
+    if (env.night && (r.surface === 'branch' || r.surface === 'perch' || r.surface === 'canopy') && Math.random() < 0.85) return;
+    const x = env.night ? Math.random() * 0.34 : Math.random();
     let spot = null;
     if (x < 0.14 && r.pos.distanceTo(player.pos) < 12 && !entering) {
       spot = besides(player);
@@ -1814,9 +1845,282 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     entering = { h: from, phase: 'out', t0: 0 };
   } else {
     player.pos.set(0, 5, PARK_R + 2);
-    flyTo(player, groundPoint(0, 23), 'ground', () => { say(player, '가을이다!', 1.6); playCall('chirp', 1, 0.8); });
+    const hello = wet ? '비가 와요' : snowy ? (new Date().getMonth() === 10 ? '첫눈이다!' : '눈이다!') : env.night ? '밤 공원이다' : '가을이다!';
+    flyTo(player, groundPoint(0, 23), 'ground', () => { say(player, hello, 1.8); playCall('chirp', 1, 0.8); });
   }
   stepCamera(0, true);
+
+  // ---- snacks: sunflower seeds on the ground, and every bird nearby comes to eat ----------------
+  const SEED_N = 90;
+  const seedMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 4), mat('#3E3A35'), SEED_N);
+  seedMesh.frustumCulled = false;
+  scene.add(seedMesh);
+  const seeds = Array.from({ length: SEED_N }, () => ({ alive: false, p: new THREE.Vector3(), ry: 0, y0: 0, t0: 0, pile: null }));
+  const piles = []; // { x, z, left, until }
+  let seedsDirty = true;
+  function drawSeeds() {
+    seeds.forEach((sd, i) => {
+      dummy.position.copy(sd.p);
+      dummy.rotation.set(0, sd.ry, 0.25);
+      if (sd.alive) dummy.scale.set(0.075, 0.03, 0.042);
+      else dummy.scale.setScalar(0.0001);
+      dummy.updateMatrix();
+      seedMesh.setMatrixAt(i, dummy.matrix);
+    });
+    seedMesh.instanceMatrix.needsUpdate = true;
+  }
+  function throwSeeds(x, z, from) {
+    const pile = { x, z, left: 0, until: clock + 50 };
+    for (let k = 0, i = 0; k < 16 && i < SEED_N; i++) {
+      const sd = seeds[i];
+      if (sd.alive) continue;
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 0.9;
+      sd.alive = true;
+      sd.pile = pile;
+      sd.p.set(x + Math.cos(a) * r, from, z + Math.sin(a) * r);
+      sd.y0 = from;
+      sd.t0 = clock + Math.random() * 0.15;
+      sd.ry = Math.random() * Math.PI;
+      pile.left++;
+      k++;
+    }
+    piles.push(pile);
+    seedsDirty = true;
+    return pile;
+  }
+  function eatFrom(pile, a) {
+    let best = null, bd = Infinity;
+    seeds.forEach((sd) => {
+      if (!sd.alive || sd.pile !== pile) return;
+      const d = Math.hypot(sd.p.x - a.pos.x, sd.p.z - a.pos.z);
+      if (d < bd) { bd = d; best = sd; }
+    });
+    if (!best) return;
+    best.alive = false;
+    pile.left--;
+    seedsDirty = true;
+    if (a.pos.distanceTo(player.pos) < 8) playFx('crunch', a.isPlayer ? 0.35 : 0.18);
+  }
+  const YUM = ['냠냠', '맛있다!', '해바라기씨다', '오독오독', '하나 더!'];
+  /** Birds within reach come over, settle round the pile and eat. */
+  function callToSnack(pile) {
+    residents
+      .filter((r) => !r.move && r.scale > 0.5 && r.pos.distanceTo(new THREE.Vector3(pile.x, 0, pile.z)) < 18)
+      .slice(0, 6)
+      .forEach((r, k) => {
+        setTimeout(() => {
+          if (gone || pile.left <= 0) return;
+          const a = Math.random() * Math.PI * 2, rr = 0.75 + Math.random() * 0.35;
+          const spot = groundPoint(pile.x + Math.cos(a) * rr, pile.z + Math.sin(a) * rr);
+          r.action = null;
+          goTo(r, spot, 'ground', () => {
+            r.rotTarget = angleTo(r.pos, new THREE.Vector3(pile.x, 0, pile.z));
+            act(r, 'EAT', 4 + Math.random() * 3);
+            r.nextThink = clock + 9;
+            if (Math.random() < 0.6) say(r, pick(YUM), 1.3);
+          });
+          r.nextThink = clock + 20;
+        }, 300 + k * 350 + Math.random() * 400);
+      });
+  }
+  function stepSnacks() {
+    seeds.forEach((sd) => {
+      if (!sd.alive || sd.p.y <= 0.031) return;
+      const t = clock - sd.t0;
+      if (t < 0) return;
+      sd.p.y = Math.max(0.03, sd.y0 - 4.5 * t * t);
+      seedsDirty = true;
+    });
+    for (let i = piles.length - 1; i >= 0; i--) {
+      const pile = piles[i];
+      if (pile.left > 0 && clock < pile.until) {
+        actors.forEach((a) => {
+          if (!a.action || a.action.name !== 'EAT' || a.action.until < clock || a.move) return;
+          if (Math.hypot(a.pos.x - pile.x, a.pos.z - pile.z) > 1.6 || clock < (a.biteAt || 0)) return;
+          eatFrom(pile, a);
+          a.biteAt = clock + 0.8 + Math.random() * 0.5;
+          if (pile.left <= 0 && Math.random() < 0.5) say(a, '다 먹었다', 1.2);
+        });
+        continue;
+      }
+      seeds.forEach((sd) => { if (sd.pile === pile) sd.alive = false; });
+      piles.splice(i, 1);
+      seedsDirty = true;
+    }
+    if (seedsDirty) { drawSeeds(); seedsDirty = false; }
+  }
+  let snackAt = 0;
+  function snack() {
+    if (entering) return 'busy';
+    if (clock < snackAt) return 'wait';
+    snackAt = clock + 5;
+    const ry = player.b.group.rotation.y, fx = Math.cos(ry), fz = -Math.sin(ry);
+    const onFoot = onGround(player.pos) && !flying;
+    const at = groundPoint(player.pos.x + fx * (onFoot ? 1.0 : 0), player.pos.z + fz * (onFoot ? 1.0 : 0));
+    const pile = throwSeeds(at.x, at.z, Math.max(0.6, player.pos.y + 0.5));
+    act(player, 'CHIRP', 0.6);
+    say(player, '간식이다!', 1.3);
+    playCall('chirp', 1, 0.8);
+    if (onFoot) {
+      player.move = null;
+      player.rotTarget = angleTo(player.pos, at);
+      setTimeout(() => { if (!gone && !player.move) act(player, 'EAT', 3.5); }, 500);
+    }
+    callToSnack(pile);
+    return 'ok';
+  }
+
+  // ---- singing: chirp three or more times in a rhythm and the birds nearby sing it back ---------
+  let songTimes = [];
+  let songCheck = 0;
+  let pendingReplies = [];
+  let gone = false;
+  const later = (ms, fn) => setTimeout(() => { if (!gone) fn(); }, ms);
+  function startSong(times) {
+    const gaps = times.map((t) => t - times[0]);
+    const len = gaps[gaps.length - 1];
+    const singers = residents.filter((r) => !r.move && r.scale > 0.5 && r.pos.distanceTo(player.pos) < 10).slice(0, 6);
+    if (!singers.length) { act(player, 'SING', len + 0.8); say(player, '♪', 1.2); return; }
+    later(450, () => act(player, 'SING', len + 1.0));
+    singers.forEach((r, k) => {
+      const start = 500 + k * 90;
+      later(start, () => {
+        act(r, 'SING', len + 0.9);
+        r.rotTarget = angleTo(r.pos, player.pos);
+        r.nextThink = Math.max(r.nextThink, clock + len + 3);
+        say(r, '♪', len + 0.6);
+      });
+      gaps.forEach((g) => later(start + g * 1000, () => playCall('chirp', r.pitch, Math.max(0.15, loudness(r)))));
+    });
+    later(600 + len * 1000 + 500, () => {
+      heartsAt(player, 3);
+      say(player, pick(['같이 불렀다!', '우리 합창단', '앵무 합창!']), 1.6);
+    });
+  }
+  function chirp() {
+    if (entering) return;
+    act(player, 'CHIRP', 0.7);
+    say(player, pick(CHIRPS), 1.2);
+    playCall('chirp', 1, 0.85);
+    songTimes = songTimes.filter((t) => clock - t < 4);
+    songTimes.push(clock);
+    if (songTimes.length >= 2) {
+      // a rhythm is starting: hold the usual replies, the song comes after
+      pendingReplies.forEach(clearTimeout);
+      pendingReplies = [];
+    } else {
+      residents.forEach((r) => {
+        if (r.pos.distanceTo(player.pos) > 7) return;
+        pendingReplies.push(setTimeout(() => {
+          if (gone) return;
+          act(r, 'CHIRP', 0.7);
+          say(r, pick(REPLIES));
+          playCall('chirp', r.pitch, loudness(r));
+          if (!r.move) r.rotTarget = angleTo(r.pos, player.pos);
+        }, 350 + Math.random() * 700));
+      });
+    }
+    clearTimeout(songCheck);
+    songCheck = setTimeout(() => {
+      if (gone) return;
+      if (songTimes.length >= 3) startSong(songTimes.slice());
+      songTimes = [];
+    }, 1500); // a pause of a beat and a half ends the tune
+  }
+
+  // ---- weather: rain (puddles you can splash in) or snow (footprints) ------------------------------
+  const PRECIP_BOX = 34, PRECIP_H = 18;
+  let precip = null;
+  if (wet || snowy) {
+    const n = wet ? (small ? 700 : 1300) : small ? 600 : 1100;
+    const pos = new Float32Array(n * (wet ? 6 : 3));
+    const seedsP = [];
+    for (let i = 0; i < n; i++) seedsP.push([Math.random() * PRECIP_BOX, Math.random() * PRECIP_H, Math.random() * PRECIP_BOX, Math.random() * Math.PI * 2]);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const obj = wet
+      ? new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: toLinear(env.night ? '#8796B0' : '#C9D4E2'), transparent: true, opacity: 0.55 }))
+      : new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: small ? 0.14 : 0.12, transparent: true, opacity: 0.95 }));
+    obj.frustumCulled = false;
+    scene.add(obj);
+    precip = { obj, pos, seeds: seedsP, n };
+  }
+  if (wet) {
+    // puddles on the paths and the plaza
+    const spots = [[2.5, 3.2, 0.9], [-3.4, -2.1, 0.7], ...[0.4, 1.3, 2.2, 3.1, 4.0, 4.9, 5.8].map((a) => [Math.cos(a) * ((RING_IN + RING_OUT) / 2), Math.sin(a) * ((RING_IN + RING_OUT) / 2), 0.8 + (a % 1) * 0.4]),
+      [1.0, 20, 0.8], [-0.6, -24, 0.9], ...[0.15, 0.35, 0.55, 0.75, 0.9].map((f) => { const q = trailPts[Math.floor(f * (trailPts.length - 1))]; return [q.x, q.z, 0.85]; })];
+    const pm = new THREE.MeshStandardMaterial({ color: toLinear(env.night ? '#2A3646' : '#7E8C98'), roughness: 0.08, metalness: 0.2 });
+    spots.forEach(([x, z, r]) => {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(1, 20), pm);
+      m.rotation.x = -Math.PI / 2;
+      m.scale.set(r * 1.3, r, 1);
+      m.position.set(x, 0.018, z);
+      scene.add(m);
+      puddles.push({ x, z, r: r * 0.95 });
+    });
+  }
+  function stepWeather(dt) {
+    if (!precip) return;
+    const cx = player.pos.x - PRECIP_BOX / 2, cz = player.pos.z - PRECIP_BOX / 2, cy = Math.max(0, player.pos.y - 4);
+    const { pos, seeds: sp, n } = precip;
+    for (let i = 0; i < n; i++) {
+      const d = sp[i];
+      if (wet) d[1] -= 17 * dt;
+      else { d[1] -= 1.1 * dt; d[0] += Math.sin(clock * 0.8 + d[3]) * 0.35 * dt; d[2] += Math.cos(clock * 0.6 + d[3]) * 0.25 * dt; }
+      if (d[1] < 0) d[1] += PRECIP_H;
+      // wrap the box around the camera so the weather is always where you are
+      const x = cx + ((((d[0] - cx) % PRECIP_BOX) + PRECIP_BOX) % PRECIP_BOX);
+      const z = cz + ((((d[2] - cz) % PRECIP_BOX) + PRECIP_BOX) % PRECIP_BOX);
+      const y = cy + d[1];
+      if (wet) {
+        pos[i * 6] = x; pos[i * 6 + 1] = y; pos[i * 6 + 2] = z;
+        pos[i * 6 + 3] = x + 0.04; pos[i * 6 + 4] = y + 0.45; pos[i * 6 + 5] = z + 0.02;
+      } else { pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z; }
+    }
+    precip.obj.geometry.attributes.position.needsUpdate = true;
+    // raindrops landing on water near you
+    if (wet && Math.random() < dt * 14) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * 12;
+      const x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
+      if (waterAt(x, z)) ripple(x, 0.04, z, 0.35);
+    }
+  }
+  // footprints in the snow: two toes forward, two back
+  const printTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const g = c.getContext('2d');
+    g.strokeStyle = 'rgba(70,78,92,0.9)';
+    g.lineWidth = 3.4;
+    g.lineCap = 'round';
+    [[16, 16, 28, 9], [16, 16, 28, 21], [16, 16, 5, 10], [16, 16, 5, 22]].forEach(([x0, y0, x1, y1]) => { g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); });
+    return new THREE.CanvasTexture(c);
+  })();
+  const PRINT_N = snowy ? 220 : 1;
+  const prints = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.26, 0.26), new THREE.MeshBasicMaterial({ map: printTex, transparent: true, depthWrite: false, opacity: 0.55 }), PRINT_N);
+  prints.frustumCulled = false;
+  prints.count = 0;
+  scene.add(prints);
+  let printNext = 0;
+  function stepPrints() {
+    if (!snowy) return;
+    actors.forEach((a) => {
+      if (a.remote || a.wet || !onGround(a.pos) || a.scale < 0.5) return;
+      const moving = a.move ? a.move.type !== 'fly' : a.isPlayer && a.stepping;
+      if (!moving || clock < (a.printAt || 0) || a.pos.distanceTo(player.pos) > 30) return;
+      a.printAt = clock + 0.24;
+      a.printSide = -(a.printSide || 1);
+      const ry = a.b.group.rotation.y, size = (a.b.size || 1) * a.scale;
+      dummy.position.set(a.pos.x + Math.sin(ry) * 0.09 * a.printSide * size, 0.02, a.pos.z + Math.cos(ry) * 0.09 * a.printSide * size);
+      dummy.rotation.set(-Math.PI / 2, 0, ry);
+      dummy.scale.setScalar(size);
+      dummy.updateMatrix();
+      prints.setMatrixAt(printNext, dummy.matrix);
+      printNext = (printNext + 1) % PRINT_N;
+      prints.count = Math.min(PRINT_N, prints.count + 1);
+      prints.instanceMatrix.needsUpdate = true;
+    });
+  }
 
   // ---- small cute things: side-eye looks, being petted, hearts ---------------------------------
   const wrapA = (x) => Math.atan2(Math.sin(x), Math.cos(x));
@@ -1889,6 +2193,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   // a bird that has been still for a while bows its head now and then: a hint that it can be petted
   function stepBeg() {
     if (player.move || flying || (player.action && player.action.until > clock) || player.wet || view === 'first') { player.stillSince = clock; return; }
+    if (env.night) return; // sleepy time, not begging time
     if (clock - (player.stillSince ?? clock) > 12 && (player.begCount || 0) < 3 && clock > (player.begAt || 0)) {
       act(player, 'BEG', 3);
       say(player, '쓰담쓰담 해줘', 2.2);
@@ -1937,6 +2242,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       d.v.set(-fx * back - fz * side, 3.0 + Math.random() * 1.8, -fz * back + fx * side).multiplyScalar(Math.sqrt(size));
     }
     ripple(ox, floor + 0.01, oz, 0.7 * size);
+    if (a.pos.distanceTo(player.pos) < 9) playFx('splash', a.isPlayer ? 0.3 : 0.12);
   }
   function stepWater(dt, steering) {
     ripples.forEach((r) => {
@@ -2049,6 +2355,13 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       else if (a.isPlayer && steering) mode = 'WALK';
       else if (a.action && a.action.until > clock) mode = a.action.name;
       else mode = a.isPlayer ? 'idle' : a.surface === 'branch' || a.surface === 'perch' || a.surface === 'canopy' ? 'CALM' : 'idle';
+      // at night birds sleep where they sit: on one leg, head tucked into the back
+      if (env.night && mode === 'CALM') mode = 'ROOST';
+      if (a.isPlayer && env.night && mode === 'idle' && !a.wet && clock - (a.stillSince ?? clock) > 10) {
+        mode = 'ROOST';
+        if (!a.roosting) say(a, 'zZ', 2);
+      }
+      a.roosting = mode === 'ROOST';
       if (a.isPlayer) playerMode = mode;
       a.b.pose(mode, reduce ? 0 : clock + a.pitch * 7, mode === 'idle' || mode === 'CALM' ? lookFor(a) : undefined);
       // the flick of a water game: throw the spray as the head comes up (same clock as the pose)
@@ -2065,13 +2378,17 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       if (clock > r.nextThink) { r.nextThink = clock + 6 + Math.random() * 8; think(r); }
       if (clock > r.nextChirp) {
         r.nextChirp = clock + 9 + Math.random() * 14;
-        if (!r.move && loudness(r) > 0.05) { act(r, 'CHIRP', 0.5); playCall(Math.random() < 0.15 ? 'call' : 'chirp', r.pitch, loudness(r) * 0.5); }
+        if (!r.move && !r.roosting && loudness(r) > 0.05) { act(r, 'CHIRP', 0.5); playCall(Math.random() < 0.15 ? 'call' : 'chirp', r.pitch, loudness(r) * 0.5); }
       }
       if (!r.move && !(r.action && r.action.until > clock) && r.pos.distanceTo(player.pos) < 1.8) r.rotTarget = angleTo(r.pos, player.pos);
     });
     keepApart();
+    player.stepping = !!steering && !flying;
     stepWater(dt, steering);
     stepHearts(dt);
+    stepSnacks();
+    stepWeather(dt);
+    stepPrints();
     if (steering) player.stillSince = clock;
     stepBeg();
     ticks.forEach((f) => f(clock, dt));
@@ -2182,21 +2499,11 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       climb = dir;
     },
     isFlying: () => flying && !landing,
-    chirp() {
-      if (entering) return;
-      act(player, 'CHIRP', 0.7);
-      say(player, pick(CHIRPS), 1.2);
-      playCall('chirp', 1, 0.85);
-      residents.forEach((r) => {
-        if (r.pos.distanceTo(player.pos) > 7) return;
-        setTimeout(() => {
-          act(r, 'CHIRP', 0.7);
-          say(r, pick(REPLIES));
-          playCall('chirp', r.pitch, loudness(r));
-          if (!r.move) r.rotTarget = angleTo(r.pos, player.pos);
-        }, 350 + Math.random() * 700);
-      });
-    },
+    /** Chirp; three or more in a rhythm and the birds nearby sing it back. */
+    chirp,
+    /** Throw sunflower seeds: 'ok', 'wait' (just threw some), or 'busy'. */
+    snack,
+    weather,
     /** One of the preset lines over my head. */
     say(text) {
       say(player, text, 2.6);
@@ -2315,6 +2622,9 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       stepCamera(0, true, false);
     },
     dispose() {
+      gone = true;
+      clearTimeout(songCheck);
+      pendingReplies.forEach(clearTimeout);
       cancelAnimationFrame(raf);
       ro.disconnect();
       if (window.__angpark === api) delete window.__angpark;

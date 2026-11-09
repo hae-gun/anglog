@@ -20,6 +20,8 @@ interface Controller {
   setClimb(dir: number): void;
   isFlying(): boolean;
   chirp(): void;
+  snack(): 'ok' | 'wait' | 'busy';
+  weather: 'rain' | 'snow' | 'clear';
   say(text: string): void;
   playTogether(): string | null;
   enter(handle: string): boolean;
@@ -268,7 +270,7 @@ export function ParkPage() {
       {broken && <p className="play-note park-note">이 기기에서는 3D 앵파크를 열 수 없어요. 집 목록으로 놀러가 주세요.</p>}
       {!rooms && !error && <p className="park-hint">앵파크 문 여는 중</p>}
       {rooms && hint && !broken && !bird && (
-        <p className="park-hint">조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 둘러봐요. 날기로 날아올라 위로, 아래로 높이를 바꾸고, 집 문을 누르면 들어가요.</p>
+        <p className="park-hint">조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 둘러봐요. 날기로 날아올라 위로, 아래로 높이를 바꾸고, 집 문을 누르면 들어가요. 짹짹을 박자 맞춰 세 번 넘게 누르면 근처 앵무들이 따라 불러요.</p>
       )}
 
       {bird && (
@@ -315,11 +317,14 @@ export function ParkPage() {
             if (ctl.current?.playTogether() == null) setToast('근처에 같이 놀 앵무가 없어요.');
             else net.current?.emote('dance');
           }}>같이 놀기</button>
-          {myBird && me
-            ? <button className="pbtn small" onClick={() => { if (!ctl.current?.enter(me.handle)) navigate(`/play/${me.handle}`); }}>내 집</button>
-            : <button className="pbtn small" onClick={() => setSheet('dress')}>꾸미기</button>}
-          <button className="pbtn small" onClick={surf}>아무 집</button>
-          <button className="pbtn small" onClick={() => setSheet('list')}>집 목록</button>
+          <button className="pbtn" onClick={() => { if (ctl.current?.snack() === 'wait') setToast('방금 줬어요. 다 먹고 나면 또 줘요.'); }}>간식</button>
+          <div className="park-small">
+            {myBird && me
+              ? <button className="pbtn small" onClick={() => { if (!ctl.current?.enter(me.handle)) navigate(`/play/${me.handle}`); }}>내 집</button>
+              : <button className="pbtn small" onClick={() => setSheet('dress')}>꾸미기</button>}
+            <button className="pbtn small" onClick={surf}>아무 집</button>
+            <button className="pbtn small" onClick={() => setSheet('list')}>집 목록</button>
+          </div>
         </div>
       </div>
 

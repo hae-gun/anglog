@@ -292,13 +292,18 @@ export function makeBird(colors, species) {
 
   // feet: short feathered legs, two toes forward and two back, gripping
   const FOOT = species === 'COCKATIEL' || species === 'QUAKER' || species === 'GREEN_CHEEKED_CONURE' ? '#8F8783' : '#C9A9A0';
-  [-1, 1].forEach((s) => {
-    blob(inner, shade(c.body, 0.95), 0.03, 0.2, 0.12 * s, 0.1, 0.1, 0.08);
-    blob(inner, FOOT, 0.05, 0.08, 0.12 * s, 0.032, 0.08, 0.032, 0, 0, SPH_LO);
+  // each leg is its own group, so a sleeping bird can pull one up into its belly feathers
+  const legs = [-1, 1].map((s) => {
+    const lg = new THREE.Group();
+    lg.position.set(0.05, 0, 0.12 * s);
+    inner.add(lg);
+    blob(lg, shade(c.body, 0.95), -0.02, 0.2, 0, 0.1, 0.1, 0.08);
+    blob(lg, FOOT, 0, 0.08, 0, 0.032, 0.08, 0.032, 0, 0, SPH_LO);
     [[0.07, 0.12], [0.07, -0.18], [-0.06, 0.25], [-0.06, -0.12]].forEach(([dx, a]) => {
-      const t = blob(inner, FOOT, 0.05 + dx, 0.02, 0.12 * s + a * 0.12, 0.07, 0.022, 0.024, 0, 0, SPH_LO);
+      const t = blob(lg, FOOT, dx, 0.02, a * 0.12, 0.07, 0.022, 0.024, 0, 0, SPH_LO);
       t.rotation.y = -a * Math.sign(dx);
     });
+    return lg;
   });
 
   // a soft neck, so the head sits on the body instead of floating on it
@@ -493,6 +498,7 @@ export function makeBird(colors, species) {
     inner.position.set(0, 0, 0);
     inner.rotation.set(0, 0, 0);
     inner.scale.set(1, 1, 1);
+    legs.forEach((lg) => { lg.position.y = 0; lg.scale.y = 1; });
     head.position.set(hx, hy, 0);
     head.rotation.set(0, 0, 0);
     beak.scale.set(1, 1, 1);
@@ -599,6 +605,36 @@ export function makeBird(colors, species) {
         inner.rotation.x = Math.sin(tt * 5) * 0.06;
         if (head.userData.crest) head.userData.crest.rotation.z = 0.35;
         eyeY = 0.15;
+        break;
+      }
+      case 'ROOST': {
+        // asleep: on one leg, the other pulled up, head turned round and tucked into the back feathers
+        legs[1].position.y = 0.13;
+        legs[1].scale.y = 0.35;
+        inner.scale.set(1.12, 1.06 + Math.sin(tt * 1.2) * 0.02, 1.12);
+        head.rotation.set(0, 2.5, -0.35);
+        head.position.set(hx - 0.32, hy - 0.12, 0.05);
+        if (head.userData.crest) head.userData.crest.rotation.z = 0.7;
+        eyeY = 0.12;
+        break;
+      }
+      case 'SING': {
+        // bobbing along to a song, beak opening on the beat
+        const k = Math.sin(tt * 9.5);
+        head.position.y = hy + Math.max(0, k) * 0.08;
+        head.rotation.z = 0.25 + k * 0.18;
+        inner.position.y = Math.abs(k) * 0.04;
+        beak.scale.set(1, 1 + Math.max(0, k) * 0.35, 1.1);
+        wingPose(0.15, Math.max(0, k) * 0.15);
+        if (head.userData.crest) head.userData.crest.rotation.z = -0.4;
+        break;
+      }
+      case 'PECK': {
+        // pecking at a toy: quick jabs forward
+        const k = Math.max(0, Math.sin(tt * 14));
+        head.rotation.z = -0.5 * k;
+        head.position.x = hx + 0.14 * k;
+        inner.rotation.z = -0.12 * k;
         break;
       }
       case 'BEG':

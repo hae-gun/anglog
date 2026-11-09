@@ -308,6 +308,8 @@ img { max-width: 100%; display: block; }
 .pbtn.fly { background: var(--seed); grid-column: span 2; min-height: 52px; font-size: 17px; }
 .pbtn.fly[aria-pressed='true'] { background: #CFE3F5; }
 .pbtn.small { min-height: 36px; font-size: 13px; }
+.park-small { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.park-small .pbtn.small { padding: 0 2px; }
 .pbtn:active { transform: translate(2px, 2px); box-shadow: none; }
 .park-me { gap: 6px; }
 .park-me .dot { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--ink); }
@@ -331,8 +333,8 @@ img { max-width: 100%; display: block; }
 .owner-pitch { margin-top: 18px; padding: 12px; border: 2px dashed var(--ink); border-radius: 12px; background: #FFF1C9; }
 .owner-pitch p { margin: 6px 0 10px; font-size: 14px; }
 @media (min-width: 720px) {
-  .park-buttons { grid-template-columns: repeat(3, 84px); }
-  .pbtn.fly { grid-column: span 3; }
+  .park-buttons { grid-template-columns: repeat(4, 84px); }
+  .pbtn.fly { grid-column: span 4; }
 }
 .sheet-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(43, 38, 34, 0.42); display: flex; align-items: flex-end; justify-content: center; }
 .sheet { position: relative; width: min(560px, 100%); max-height: 82dvh; overflow-y: auto; background: var(--paper); border: 2px solid var(--ink); border-bottom: 0; border-radius: 18px 18px 0 0; padding: 56px 16px calc(20px + env(safe-area-inset-bottom, 0px)); }
