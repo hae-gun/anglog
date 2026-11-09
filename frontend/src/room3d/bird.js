@@ -154,9 +154,10 @@ const SHAPES = {
     size: 1.1, body: [0.47, 0.38, 0.36], tilt: 0.64, head: [0.33, 0.96], headR: 0.96, beak: ['#46413D', 1.0],
     tail: { lens: [1.0, 0.9, 0.78], pair: false, w: 0.04, fan: 0.13, down: 0.42 }, wing: 1.12, flight: '#3B66B0',
   },
-  // Indian ringneck: slim, upright, red beak, and a very long thin tail (more than half its 40 cm)
+  // Indian ringneck: slim and upright, a small round head up on a long neck, a pale-eyed blank stare,
+  // red beak and a very long thin tail (more than half its 40 cm)
   RINGNECK: {
-    size: 1.15, body: [0.43, 0.34, 0.32], tilt: 0.78, head: [0.32, 1.0], headR: 0.86, headShape: [1.13, 0.88, 0.86], beak: ['#D8332E', 1.38], lowerBeak: '#3A2B29',
+    size: 1.15, body: [0.43, 0.34, 0.32], tilt: 0.86, head: [0.28, 1.13], headR: 0.86, headShape: [1.04, 1, 0.96], neck: 0.12, beak: ['#E0393A', 1.12], lowerBeak: '#3A2B29', paleEye: '#F3E7B6',
     tail: { lens: [1.75, 1.2, 0.86], pair: true, w: 0.022, fan: 0.07, down: 0.52 }, wing: 1.15,
   },
   OTHER: {
@@ -315,6 +316,8 @@ export function makeBird(colors, species, opts = {}) {
   // a soft neck, so the head sits on the body instead of floating on it
   const [hx, hy] = S.head;
   blob(inner, c.body, hx - 0.1, hy - 0.2, 0, 0.24, 0.2, 0.25, 0.3);
+  // S.neck: a longer neck, the head sitting up off the shoulders
+  if (S.neck) blob(inner, c.body, hx - 0.12 - S.neck * 0.3, hy - 0.2 - S.neck, 0, 0.23, 0.22 + S.neck * 0.4, 0.24, 0.35);
 
   // head
   const head = new THREE.Group();
@@ -368,7 +371,7 @@ export function makeBird(colors, species, opts = {}) {
     if (opts.ring !== false) {
       // adult males: a black chin that runs into a thin black collar around the neck,
       // with a rose band just above it around the back. The collar dips at the throat.
-      blob(head, '#1E1A1A', 0.24, -0.2, 0, 0.09, 0.05, 0.12, -0.5);
+      blob(head, '#1E1A1A', 0.22, -0.2, 0, 0.06, 0.03, 0.09, -0.5);
       const neck = new THREE.Group();
       neck.position.set(-0.09, -0.21, 0);
       neck.rotation.z = -0.38;
@@ -400,10 +403,16 @@ export function makeBird(colors, species, opts = {}) {
     const eg = new THREE.Group();
     eg.position.set(0.24, 0.12, 0.27 * s);
     head.add(eg);
-    blob(eg, '#1B1B1B', 0, 0, 0, 0.07, 0.078, 0.05);
+    // S.paleEye: a pale iris around a small pupil, the blank "what?" stare ringnecks have
+    if (S.paleEye) {
+      blob(eg, S.paleEye, 0, 0, 0, 0.062, 0.066, 0.045);
+      blob(eg, '#1B1B1B', 0.004, 0.002, 0.012 * s, 0.032, 0.036, 0.042);
+    } else {
+      blob(eg, '#1B1B1B', 0, 0, 0, 0.07, 0.078, 0.05);
+    }
     const hl = new THREE.Mesh(SPH_LO, shineMat);
     hl.position.set(0.028, 0.032, 0.035 * s);
-    hl.scale.setScalar(0.024);
+    hl.scale.setScalar(S.paleEye ? 0.013 : 0.024);
     eg.add(hl);
     const hl2 = new THREE.Mesh(SPH_LO, shineMat);
     hl2.position.set(-0.02, -0.03, 0.04 * s);
@@ -411,7 +420,7 @@ export function makeBird(colors, species, opts = {}) {
     eg.add(hl2);
     if (species === 'RINGNECK') {
       // thin orange-red ring around the eye
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.014, 6, 16), toon('#E26A3A'));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.014, 6, 16), toon('#E8863A'));
       ring.position.set(0.24, 0.12, 0.27 * s + 0.012 * s);
       head.add(ring);
     }
