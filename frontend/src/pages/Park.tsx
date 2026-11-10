@@ -12,10 +12,12 @@ import { LangSwitch } from '../components/LangSwitch';
 import { isMuted, setMuted } from '../lib/sound';
 import { musicOn, setMusicOn, startAmbience, stopAmbience } from '../lib/ambience';
 import { mountPark } from '../room3d/park.js';
+import { ParkTutorial, TutorialPark } from '../components/ParkTutorial';
+import { giveScarf, loadScarf } from '../lib/scarf';
 import { useSession } from '../session';
 import { isEn, tr } from '../i18n';
 
-interface Controller {
+interface Controller extends TutorialPark {
   setInput(x: number, y: number): void;
   toggleFly(): boolean;
   setView(v: 'third' | 'first'): 'third' | 'first';
@@ -58,6 +60,8 @@ const PARK_HOUSES = 12;
 const INVITE_KEY = 'anglog-invite-seen';
 const INVITE_AFTER_MS = 3 * 60 * 1000;
 const BIRD_KEY = 'anglog-park-bird';
+const TUT_KEY = 'anglog-park-tutorial';
+const DOOR_TIP_KEY = 'anglog-park-door-tip';
 const VIEW_KEY = 'anglog-park-view';
 const CALM_KEY = 'anglog-park-calm';
 const TUDAK_KEY = 'anglog-park-tudak';
@@ -148,10 +152,18 @@ export function ParkPage() {
 
   // owners with several birds pick which one walks in the park
   const myBird = parrots.find((p) => p.id === birdId) ?? parrots[0] ?? null;
-  const visitor = myBird ?? guest;
+  // 첫 산책(튜토리얼)과 그 보상 목도리
+  const [tutorial, setTutorial] = useState(() => !readKey(TUT_KEY));
+  const tutorialRef = useRef(tutorial);
+  tutorialRef.current = tutorial;
+  const [tutRound, setTutRound] = useState(0);
+  const tutEvents = useRef(new EventTarget());
+  const [scarf, setScarf] = useState(loadScarf);
+  const baseBird = myBird ?? guest;
+  const visitor = scarf ? { ...baseBird, colors: { ...baseBird.colors, scarf } } : baseBird;
   const visitorRef = useRef(visitor);
   visitorRef.current = visitor;
-  const visitorKey = `${visitor.name}|${visitor.species}|${visitor.colors.face}|${visitor.colors.head}|${visitor.colors.body}|${visitor.colors.wing}|${visitor.colors.tail}`;
+  const visitorKey = `${visitor.name}|${visitor.species}|${visitor.colors.face}|${visitor.colors.head}|${visitor.colors.body}|${visitor.colors.wing}|${visitor.colors.tail}|${visitor.colors.scarf ?? ''}`;
   const mountedKey = useRef('');
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -205,6 +217,12 @@ export function ParkPage() {
         onEnter: (handle: string) => navigate(`/play/${handle}`),
         onBirdTap: (who: BirdPop) => setBird(who),
         onZone: (z: 'park' | 'pepero') => setZone(z),
+        onTutorial: (e: 'chorus' | 'pranked' | 'nearDoor') => {
+          if (e !== 'nearDoor') { tutEvents.current.dispatchEvent(new Event(e)); return; }
+          if (tutorialRef.current || readKey(DOOR_TIP_KEY)) return;
+          writeKey(DOOR_TIP_KEY, '1');
+          setToast(tr('집 문을 누르면 그 집에 놀러 갈 수 있어요.', 'Tap the door to visit that house.'));
+        },
         onPrank: (pid: number, k: number) => net.current?.prank(pid, k),
         onPranked: (who: Pranked) => {
           if (who.back) countTudak(who.name);
@@ -412,6 +430,7 @@ export function ParkPage() {
       : { get label() { return tr('꾸미기', 'Dress up'); }, run: () => setSheet('dress') },
     { get label() { return tr('아무 집', 'Random house'); }, run: () => { setSheet(null); surf(); } },
     { get label() { return tr('집 목록', 'Houses'); }, run: () => setSheet('list') },
+    { get label() { return tr('첫 산책 다시', 'Tutorial'); }, run: () => { setSheet(null); setTutRound((n) => n + 1); setTutorial(true); } },
     { label: view === 'first' ? tr('3인칭으로', 'Third person') : tr('1인칭으로', 'First person'), run: () => { setSheet(null); toggleView(); } },
     { label: muted ? tr('소리 켜기', 'Sound on') : tr('소리 끄기', 'Sound off'), run: () => { setMuted(!muted); setMute(!muted); } },
     ...(muted ? [] : [{ label: music ? tr('음악 끄기', 'Music off') : tr('음악 켜기', 'Music on'), run: () => { setMusicOn(!music); setMusic(!music); } }]),
@@ -450,8 +469,15 @@ export function ParkPage() {
       {error && hint && <p className="play-note park-note" role="alert">{error}</p>}
       {broken && <p className="play-note park-note">{tr('이 기기에서는 3D 앵파크를 열 수 없어요. 집 목록으로 놀러가 주세요.', 'This device cannot open the 3D park. Visit houses from the list instead.')}</p>}
       {!rooms && !error && <p className="park-hint">{tr('앵파크 문 여는 중', 'Opening the park')}</p>}
-      {rooms && hint && !broken && !bird && (
-        <p className="park-hint">{tr('조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 둘러봐요. 날기로 날아올라 위로, 아래로 높이를 바꾸고, 집 문을 누르면 들어가요. 짹짹을 박자 맞춰 세 번 넘게 누르면 근처 앵무들이 따라 불러요.', 'Walk with the stick or by tapping the ground, drag to look around. Fly, then go up or down, and tap a door to go in. Chirp three or more times in a rhythm and the birds nearby sing along.')}</p>
+      {tutorial && rooms && !broken && (
+        <ParkTutorial
+          key={tutRound}
+          park={() => ctl.current}
+          events={tutEvents.current}
+          loggedIn={!!me}
+          onFinish={() => { const c = giveScarf(); setScarf(c); writeKey(TUT_KEY, '1'); return c; }}
+          onSkip={() => { writeKey(TUT_KEY, '1'); setTutorial(false); }}
+        />
       )}
 
       {bird && (

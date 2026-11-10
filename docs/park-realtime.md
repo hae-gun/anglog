@@ -29,11 +29,11 @@
 | answer | `{to, a}` to가 나에게 친 장난에 답. 0 되받아치기, 1 화해, 2 무시 | 기다리는 장난이 있을 때만 |
 | calm | `{on}` 장난 받지 않기 켜기, 끄기 | 1초에 한 번 |
 
-look은 `{name, species, colors: {face, head, body, wing, tail}, home}`.
+look은 `{name, species, colors: {face, head, body, wing, tail, scarf}, home}`. scarf는 첫 산책(튜토리얼)을 끝내고 받은 목도리 색으로, 없으면 null.
 
 - name은 보이지 않는 문자를 지우고 공백을 줄인 뒤 12자까지. 비었거나 금칙어가 들어 있으면 "앵무".
 - species는 LOVEBIRD, BUDGIE, COCKATIEL, QUAKER, GREEN_CHEEKED_CONURE, OTHER 중 하나. 아니면 OTHER.
-- colors는 `#RRGGBB`. 아니면 그 부위만 기본색.
+- colors는 `#RRGGBB`. 아니면 그 부위만 기본색(scarf는 null).
 - home은 다른 사람이 "집에 놀러가기"를 누를 수 있게 하는 앵로그 아이디다. 브라우저는 내 앵무로 놀 때 아무 값이나 넣어 "집을 보여 달라"고만 하고, 실제 아이디는 서버가 토큰에서 꺼내 붙인다. 토큰이 없거나 틀리면 home은 항상 null이라 남의 집을 사칭할 수 없다.
 - 거부하지 않고 조용히 고친다. 고장 난 클라이언트도 들어올 수 있게 하려는 것.
 

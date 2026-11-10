@@ -16,7 +16,7 @@ public class LookRules {
 
     public static final int NAME_MAX = 12;
     public static final String DEFAULT_NAME = "앵무";
-    public static final Colors DEFAULT_COLORS = new Colors("#F3EDE0", "#F3EDE0", "#9BC9A0", "#7FAE86", "#7FAE86");
+    public static final Colors DEFAULT_COLORS = new Colors("#F3EDE0", "#F3EDE0", "#9BC9A0", "#7FAE86", "#7FAE86", null);
 
     static final Set<String> SPECIES = Set.of("LOVEBIRD", "BUDGIE", "COCKATIEL", "QUAKER", "GREEN_CHEEKED_CONURE", "OTHER");
     private static final Pattern COLOR = Pattern.compile("#[0-9a-fA-F]{6}");
@@ -39,7 +39,8 @@ public class LookRules {
                 color(c.path("head").asText(null), DEFAULT_COLORS.head()),
                 color(c.path("body").asText(null), DEFAULT_COLORS.body()),
                 color(c.path("wing").asText(null), DEFAULT_COLORS.wing()),
-                color(c.path("tail").asText(null), DEFAULT_COLORS.tail()));
+                color(c.path("tail").asText(null), DEFAULT_COLORS.tail()),
+                color(c.path("scarf").asText(null), null));
         String species = look.path("species").asText("");
         String home = look.path("home").asText(null);
         return new Look(

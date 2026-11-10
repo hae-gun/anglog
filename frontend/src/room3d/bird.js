@@ -310,6 +310,34 @@ export function makeBird(colors, species) {
   const [hx, hy] = S.head;
   blob(inner, c.body, hx - 0.1, hy - 0.2, 0, 0.24, 0.2, 0.25, 0.3);
 
+  // a knitted scarf (the reward for finishing the first walk with 모란이): a fat ring around the neck,
+  // a stripe, and one end hanging down the chest
+  if (c.scarf) {
+    const scarf = new THREE.Group();
+    scarf.position.set(hx - 0.1, hy - 0.26, 0);
+    scarf.rotation.z = 0.35;
+    inner.add(scarf);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.1, 8, 22), toon(c.scarf));
+    ring.rotation.x = Math.PI / 2;
+    ring.scale.set(1.05, 1.15, 1);
+    scarf.add(ring);
+    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.292, 0.038, 6, 22), toon(shade(c.scarf, 1.35)));
+    stripe.rotation.x = Math.PI / 2;
+    stripe.position.y = 0.05;
+    stripe.scale.set(1.05, 1.15, 1);
+    scarf.add(stripe);
+    // one end down the chest, one fluttering down the back (that is the side the camera mostly sees)
+    [[0.24, -0.14, 0.1, -0.25, 0.28], [-0.44, -0.02, -0.06, 1.15, 0.4], [-0.4, -0.08, 0.08, 0.95, 0.32]].forEach(([x, y, z, rz, len]) => {
+      const end = new THREE.Mesh(new THREE.BoxGeometry(0.075, len, 0.14), toon(c.scarf));
+      end.position.set(x, y, z);
+      end.rotation.z = rz;
+      scarf.add(end);
+      const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.045, 0.144), toon(shade(c.scarf, 1.35)));
+      fringe.position.set(0, -len / 2 + 0.01, 0);
+      end.add(fringe);
+    });
+  }
+
   // head
   const head = new THREE.Group();
   head.position.set(hx, hy, 0);

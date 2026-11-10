@@ -32,4 +32,11 @@ class LookRulesTest {
         assertThat(look.home()).isEqualTo("bori_home");
         assertThat(rules.normalize(null).name()).isEqualTo(LookRules.DEFAULT_NAME);
     }
+
+    @Test
+    void scarfIsAColorOrNothing() throws Exception {
+        assertThat(rules.normalize(mapper.readTree("{\"colors\":{\"scarf\":\"#e8a33d\"}}")).colors().scarf()).isEqualTo("#E8A33D");
+        assertThat(rules.normalize(mapper.readTree("{\"colors\":{\"scarf\":\"url(x)\"}}")).colors().scarf()).isNull();
+        assertThat(rules.normalize(mapper.readTree("{\"colors\":{}}")).colors().scarf()).isNull();
+    }
 }

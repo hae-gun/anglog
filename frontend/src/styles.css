@@ -432,3 +432,21 @@ html[lang="en"] .park-plate.lit::after { content: 'New today'; }
 .admin-msg { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--leaf-soft); font-size: 14px; }
 /* 빼빼로 숲 event: a chocolate-dipped chip */
 .park-pepero { background: linear-gradient(90deg, #E3B574 0 22%, #5A3322 22% 100%); color: #FFF6EA; border-color: #3A2418; }
+
+/* ---- 첫 산책(튜토리얼): 모란이 안내 카드 ---- */
+.park-tut { position: absolute; z-index: 5; left: 8px; right: 8px; top: calc(56px + env(safe-area-inset-top, 0px)); margin: 0 auto; max-width: 440px; padding: 10px 12px 10px; border: 2px solid var(--ink); border-radius: 14px; background: #FFF3C4; box-shadow: var(--shadow); animation: prank-in 0.25s ease-out; }
+.park-tut p { margin: 4px 0 0; font-size: 15px; line-height: 1.4; }
+.park-tut-head { display: flex; align-items: center; gap: 8px; }
+.park-tut-head b { font: 17px/1.2 var(--display); flex: 1; }
+.park-tut-n { font: 13px/1 var(--display); background: var(--ink); color: #FFF3C4; border-radius: 999px; padding: 4px 8px; }
+.park-tut-skip { border: 0; background: none; font-size: 13px; color: var(--muted); text-decoration: underline; padding: 4px; cursor: pointer; }
+.park-tut-dots { display: flex; gap: 6px; margin-top: 8px; }
+.park-tut-dots span { width: 18px; height: 5px; border-radius: 3px; background: rgba(43, 38, 34, 0.18); }
+.park-tut-dots span.on { background: var(--leaf); }
+.park-tut-dots span.now { background: var(--ink); }
+.park-tut.done { background: #E9F6E2; }
+.park-tut.done .row { margin-top: 10px; }
+.park-tut-sub { font-size: 14px; }
+.park-tut-scarf { width: 26px; height: 14px; border-radius: 7px; border: 2px solid var(--ink); flex: none; }
+.room-tag.room-tag-guide { background: #FFE07A; color: var(--ink); border: 1.5px solid var(--ink); }
+@media (prefers-reduced-motion: reduce) { .park-tut { animation: none; } }

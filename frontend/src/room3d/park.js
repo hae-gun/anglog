@@ -5,7 +5,7 @@
 // is never empty. Other people connected at the same time show up as remote birds (see lib/parkNet.ts).
 import * as THREE from 'three';
 import { playCall, playFx } from '../lib/sound';
-import { makeBird, toLinear } from './bird.js';
+import { makeBird, toLinear, toon } from './bird.js';
 import { disposeScene, mat, rod, skyNow } from './scene.js';
 import { buildPepero, peperoOpen } from './pepero.js';
 import { tr } from '../i18n';
@@ -95,13 +95,14 @@ const SLOT_ANGLES = (() => {
  * Pranks: onPrank(pid, kind) when I prank a live bird (the page asks the server), onPranked({ id, name, remote, kind, back })
  * when a bird pranks me or answers back, onAnswered({ id, name, remote, answer }) when one makes up (1) or flies off (2).
  * opts.startAt: a handle to come out of (back from that house), or null to fly in at the gate.
+ * onTutorial(e): 'chorus' when birds sang my chirps back, 'pranked' when I pranked 모란이, 'nearDoor' the first time I reach a door.
  * @param {HTMLElement} container
  * @param {any[]} cards
  * @param {{ visitor: any, startAt?: string | null, onEnter?: (h: string) => void, onBirdTap?: (who: any) => void, onEmptyLot?: () => void,
  *   onPrank?: (pid: number, k: number) => void, onPranked?: (who: any) => void, onAnswered?: (who: any) => void,
- *   onZone?: (zone: 'park' | 'pepero') => void }} opts
+ *   onZone?: (zone: 'park' | 'pepero') => void, onTutorial?: (e: 'chorus' | 'pranked' | 'nearDoor') => void }} opts
  */
-export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot, onPrank, onPranked, onAnswered, onZone } = /** @type {any} */ ({})) {
+export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot, onPrank, onPranked, onAnswered, onZone, onTutorial } = /** @type {any} */ ({})) {
   const env = skyNow();
   const small = Math.min(window.innerWidth, window.innerHeight) < 720;
   // ?night=1 and ?weather=rain|snow|clear try out the other looks (for checking, and for fun)
@@ -1418,6 +1419,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   // ---- resident life ---------------------------------------------------------------------------
   let entering = null;
   function think(r) {
+    if (r.guide) return; // 모란이 goes where the tutorial sends her
     if (r.move || (r.action && r.action.until > clock) || r.riding || (r.riddenUntil ?? 0) > clock) return;
     // at night most birds stay asleep where they are, and the ones awake look for a branch
     if (env.night && (r.surface === 'branch' || r.surface === 'perch' || r.surface === 'canopy') && Math.random() < 0.85) return;
@@ -1640,6 +1642,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   }
   const pointers = new Map();
   let drag = null;
+  let lookedAround = 0; // how far I have turned the camera myself (radians), for the tutorial
   let pinch = null;
   const onDown = (e) => {
     cv.setPointerCapture?.(e.pointerId);
@@ -1663,7 +1666,9 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     if (!drag) return;
     if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 9) drag.moved = true;
     if (!drag.moved) return;
-    cam.yawT -= ((e.clientX - drag.x) / Math.max(w, 1)) * Math.PI * 1.6;
+    const turn = ((e.clientX - drag.x) / Math.max(w, 1)) * Math.PI * 1.6;
+    cam.yawT -= turn;
+    lookedAround += Math.abs(turn); // only my own drags count for the tutorial's "look around" step
     if (view === 'first') fpPitch = clamp(fpPitch + ((e.clientY - drag.y) / Math.max(h, 1)) * 1.6, -0.9, 0.9);
     else cam.pitchT = clamp(cam.pitchT + ((e.clientY - drag.y) / Math.max(h, 1)) * 1.8, 0.08, 1.3);
     manualUntil = clock + 2;
@@ -1711,7 +1716,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
             playCall('chirp', other.pitch, loudness(other));
           }
         });
-        if (onBirdTap) {
+        if (onBirdTap && !other.guide) {
           onBirdTap(other.remote
             ? { handle: other.remote.home || null, nickname: null, birdName: other.name, remote: true }
             : { handle: other.house.handle, nickname: other.house.card.owner.nickname, birdName: other.name, remote: false });
@@ -2012,8 +2017,14 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   function startSong(times) {
     const gaps = times.map((t) => t - times[0]);
     const len = gaps[gaps.length - 1];
-    const singers = residents.filter((r) => !r.move && r.scale > 0.5 && r.pos.distanceTo(player.pos) < 10).slice(0, 6);
-    if (!singers.length) { act(player, 'SING', len + 0.8); say(player, '♪', 1.2); return; }
+    // 모란이 (tutorial) always joins in, even while still flying over
+    const singers = residents.filter((r) => (r.guide || (!r.move && r.scale > 0.5)) && r.pos.distanceTo(player.pos) < (r.guide ? 20 : 10)).slice(0, 6);
+    if (!singers.length) {
+      act(player, 'SING', len + 0.8);
+      say(player, '♪', 1.2);
+      if (guide && onTutorial) later(800, () => onTutorial('chorus')); // the tutorial never gets stuck here
+      return;
+    }
     later(450, () => act(player, 'SING', len + 1.0));
     singers.forEach((r, k) => {
       const start = 500 + k * 90;
@@ -2026,6 +2037,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       gaps.forEach((g) => later(start + g * 1000, () => playCall('chirp', r.pitch, Math.max(0.15, loudness(r)))));
     });
     later(600 + len * 1000 + 500, () => {
+      if (onTutorial) onTutorial('chorus');
       heartsAt(player, 3);
       say(player, pick(L(['같이 불렀다!', '우리 합창단', '앵무 합창!'], ['We sang together!', 'Our choir', 'Parrot chorus!'])), 1.6);
     });
@@ -2346,6 +2358,22 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     clock += dt;
+    // the first time I walk up to a house door, the page shows a one-line tip
+    if (onTutorial && !doorTipped && clock > doorCheckAt) {
+      doorCheckAt = clock + 0.5;
+      if (houses.some((hh) => hh.front && Math.hypot(hh.front.x - player.pos.x, hh.front.z - player.pos.z) < 2.6)) {
+        doorTipped = true;
+        onTutorial('nearDoor');
+      }
+    }
+    if (tutMarker) {
+      const { ring, arrow } = tutMarker.userData;
+      const k = 1 + 0.12 * Math.sin(clock * 4);
+      ring.scale.set(k, k, k);
+      ring.material.opacity = 0.6 + 0.3 * Math.sin(clock * 4);
+      arrow.position.y = 1.6 + Math.abs(Math.sin(clock * 3)) * 0.45;
+      arrow.rotation.y = clock * 1.5;
+    }
     if (pep && pep.zoneOf(player.pos) !== zoneNow) {
       zoneNow = pep.zoneOf(player.pos);
       if (onZone) onZone(zoneNow);
@@ -2665,6 +2693,38 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   }
   let tudakDepth = 0;
 
+  // ---- 모란이: the guide of the first walk (tutorial). A bird with no house that the page moves around ----
+  let guide = null;
+  let tutMarker = null;
+  let doorTipped = false;
+  let doorCheckAt = 0;
+  const GUIDE_COLORS = { face: '#F08A4B', head: '#7BC043', body: '#7BC043', wing: '#4E9A2E', tail: '#3D7FC4' };
+  function setMarker(p) {
+    if (tutMarker) {
+      scene.remove(tutMarker);
+      tutMarker.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      tutMarker = null;
+    }
+    if (!p) return;
+    // a glowing ring where to go, and a fat arrow bobbing above it so it shows from far away
+    tutMarker = new THREE.Group();
+    tutMarker.position.set(p.x, p.y + 0.06, p.z);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 0.8, 40),
+      new THREE.MeshBasicMaterial({ color: 0xffcf3f, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.renderOrder = 5;
+    tutMarker.add(ring);
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.6, 16), toon('#FFCF3F'));
+    arrow.rotation.x = Math.PI;
+    arrow.position.y = 1.7;
+    tutMarker.add(arrow);
+    tutMarker.userData = { ring, arrow };
+    scene.add(tutMarker);
+  }
+  const SITTING = ['branch', 'perch', 'canopy', 'swing', 'roof'];
+
   // ---- what the page can call ----------------------------------------------------------------
   const api = {
     /** Joystick vector, x right and y forward, each -1..1. */
@@ -2721,6 +2781,86 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       }
       return r.name;
     },
+    // ---- tutorial (pages/Park.tsx drives it; 모란이 only moves when told) ----
+    /** Where I am and what I am doing, for checking tutorial steps. busy while still flying in. */
+    tutorialState() {
+      return {
+        x: player.pos.x, y: player.pos.y, z: player.pos.z, yaw: cam.yaw, looked: lookedAround,
+        flying: flying && !landing, sitting: !flying && SITTING.includes(player.surface),
+        // still coming in (flying in at the gate, or out of a house)
+        busy: !!entering || (!!player.move && player.surface === 'air') || (!flying && player.pos.y > 0.3 && !SITTING.includes(player.surface)),
+      };
+    },
+    /** 모란이 flies in and lands next to me. */
+    guideShow(name) {
+      if (guide || entering) return !!guide;
+      const b = makeBird({ ...GUIDE_COLORS }, 'LOVEBIRD');
+      scene.add(b.group);
+      guide = actor(b, name, { pitch: 1.1 });
+      guide.tagEl.className = 'room-tag room-tag-guide';
+      guide.rid = 'guide';
+      guide.guide = true;
+      residents.push(guide);
+      const spot = { p: groundPoint(player.pos.x + 1.4, player.pos.z - 1.2), surface: 'ground' };
+      guide.pos.set(spot.p.x + 4, spot.p.y + 6, spot.p.z - 4);
+      flyTo(guide, spot.p, spot.surface, () => { faceEachOther(guide, player); playCall('chirp', guide.pitch, 0.7); });
+      return true;
+    },
+    guideSay(text, sec = 4) {
+      if (!guide) return;
+      say(guide, text, sec);
+    },
+    /** A spot a few steps ahead of where I am looking, marked on the ground. Returns it. */
+    markAhead(dist = 6) {
+      // straight ahead if it is open ground; otherwise turn a little at a time until there is room to walk
+      let p = null;
+      for (const turn of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
+        const a = cam.yaw + turn;
+        const q = groundPoint(player.pos.x - Math.sin(a) * dist, player.pos.z - Math.cos(a) * dist);
+        const d = Math.hypot(q.x - player.pos.x, q.z - player.pos.z);
+        if (!p || d > p.d) p = { q, d };
+        if (d > dist * 0.7) break;
+      }
+      setMarker(p.q);
+      return { x: p.q.x, z: p.q.z };
+    },
+    /** The nearest branch to sit on, marked, with 모란이 waiting there. Returns it. */
+    markPerch() {
+      const near = nearestPerch(player.pos);
+      if (!near) return null;
+      setMarker(near.p);
+      if (guide) {
+        const side = near.p.clone();
+        flyTo(guide, side, 'branch', () => { guide.rotTarget = angleTo(guide.pos, player.pos); });
+      }
+      return { x: near.p.x, y: near.p.y, z: near.p.z };
+    },
+    unmark() {
+      setMarker(null);
+    },
+    /** 모란이 comes back down next to me (after the branch step), so I can chirp and poke her. */
+    guideCome() {
+      if (!guide) return;
+      const s = besides(player);
+      flyTo(guide, s.p, s.surface, () => faceEachOther(guide, player));
+    },
+    /** 모란이 says goodbye and flies off. */
+    guideBye(text) {
+      if (!guide) return;
+      const g = guide;
+      guide = null;
+      setMarker(null);
+      if (text) say(g, text, 2.4);
+      later(2200, () => {
+        flyTo(g, new THREE.Vector3(g.pos.x - 8, g.pos.y + 9, g.pos.z - 10), 'air', null);
+        later(2600, () => {
+          const i = residents.indexOf(g);
+          if (i >= 0) residents.splice(i, 1);
+          dropActor(g);
+        });
+      });
+    },
+
     /** The nearest bird I could prank, or null. */
     prankTarget() {
       const r = nearestFriend();
@@ -2741,6 +2881,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       player.action = null;
       const go = () => {
         playPrank(player, r, k);
+        if (r.guide && onTutorial) onTutorial('pranked');
         if (r.remote) { if (onPrank) onPrank(r.remote.pid, k); }
         else { tudakDepth = 0; residentAnswers(r, 0); }
       };

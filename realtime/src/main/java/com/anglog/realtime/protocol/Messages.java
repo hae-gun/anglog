@@ -17,7 +17,8 @@ public final class Messages {
     public record Look(String name, String species, Colors colors, String home) {
     }
 
-    public record Colors(String face, String head, String body, String wing, String tail) {
+    /** scarf: the knitted scarf from finishing the first walk with 모란이 (null when the bird has none). */
+    public record Colors(String face, String head, String body, String wing, String tail, String scarf) {
     }
 
     /** Someone in the park: id within the channel, look, position, yaw, pose code, and whether they take pranks. */
