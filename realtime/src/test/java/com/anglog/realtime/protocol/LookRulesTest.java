@@ -34,9 +34,12 @@ class LookRulesTest {
     }
 
     @Test
-    void scarfIsAColorOrNothing() throws Exception {
-        assertThat(rules.normalize(mapper.readTree("{\"colors\":{\"scarf\":\"#e8a33d\"}}")).colors().scarf()).isEqualTo("#E8A33D");
-        assertThat(rules.normalize(mapper.readTree("{\"colors\":{\"scarf\":\"url(x)\"}}")).colors().scarf()).isNull();
-        assertThat(rules.normalize(mapper.readTree("{\"colors\":{}}")).colors().scarf()).isNull();
+    void wearKeepsShortIdsAndColoursOnly() throws Exception {
+        Messages.Look look = rules.normalize(mapper.readTree(
+                "{\"wear\":[\"scarf:#47b3a6\",\"pepero\",\"scarf:#000000\",\"<script>\",\"hat:red\",\"a\",\"bow\",\"cap\",\"pin\"]}"));
+        // one of each, first wins, at most four, nothing that is not an id with maybe a #colour
+        assertThat(look.wear()).containsExactly("scarf:#47B3A6", "pepero", "bow", "cap");
+        assertThat(rules.normalize(mapper.readTree("{\"wear\":\"scarf\"}")).wear()).isEmpty();
+        assertThat(rules.normalize(mapper.readTree("{}")).wear()).isEmpty();
     }
 }

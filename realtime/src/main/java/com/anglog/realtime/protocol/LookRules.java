@@ -3,6 +3,9 @@ package com.anglog.realtime.protocol;
 import com.anglog.realtime.protocol.Messages.Colors;
 import com.anglog.realtime.protocol.Messages.Look;
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
@@ -16,12 +19,15 @@ public class LookRules {
 
     public static final int NAME_MAX = 12;
     public static final String DEFAULT_NAME = "앵무";
-    public static final Colors DEFAULT_COLORS = new Colors("#F3EDE0", "#F3EDE0", "#9BC9A0", "#7FAE86", "#7FAE86", null);
+    public static final Colors DEFAULT_COLORS = new Colors("#F3EDE0", "#F3EDE0", "#9BC9A0", "#7FAE86", "#7FAE86");
 
     static final Set<String> SPECIES = Set.of("LOVEBIRD", "BUDGIE", "COCKATIEL", "QUAKER", "GREEN_CHEEKED_CONURE", "OTHER");
     private static final Pattern COLOR = Pattern.compile("#[0-9a-fA-F]{6}");
     private static final Pattern HANDLE = Pattern.compile("[a-z0-9_]{3,20}");
     private static final Pattern INVISIBLE = Pattern.compile("[\\p{Cc}\\p{Cf}\\p{Co}\\p{Cn}]");
+
+    static final Pattern WEAR = Pattern.compile("[a-z]{2,12}(:#[0-9A-Fa-f]{6})?");
+    static final int WEAR_MAX = 4;
 
     private final BlockedWords blocked;
 
@@ -39,15 +45,31 @@ public class LookRules {
                 color(c.path("head").asText(null), DEFAULT_COLORS.head()),
                 color(c.path("body").asText(null), DEFAULT_COLORS.body()),
                 color(c.path("wing").asText(null), DEFAULT_COLORS.wing()),
-                color(c.path("tail").asText(null), DEFAULT_COLORS.tail()),
-                color(c.path("scarf").asText(null), null));
+                color(c.path("tail").asText(null), DEFAULT_COLORS.tail()));
         String species = look.path("species").asText("");
         String home = look.path("home").asText(null);
         return new Look(
                 name(look.path("name").asText(null)),
                 SPECIES.contains(species) ? species : "OTHER",
                 colors,
-                home != null && HANDLE.matcher(home).matches() ? home : null);
+                home != null && HANDLE.matcher(home).matches() ? home : null,
+                wear(look.path("wear")));
+    }
+
+    /** "scarf:#47B3A6", "pepero": a short id, maybe a colour. At most four, one of each, unknown shapes dropped. */
+    List<String> wear(JsonNode list) {
+        if (list == null || !list.isArray()) {
+            return List.of();
+        }
+        Map<String, String> out = new LinkedHashMap<>();
+        for (JsonNode n : list) {
+            String s = n.asText("");
+            if (out.size() < WEAR_MAX && WEAR.matcher(s).matches()) {
+                String[] parts = s.split(":");
+                out.putIfAbsent(parts[0], parts.length == 2 ? parts[0] + ":" + parts[1].toUpperCase() : parts[0]);
+            }
+        }
+        return List.copyOf(out.values());
     }
 
     /** Invisible characters removed, spaces collapsed, at most 12 characters, nothing blocked. */

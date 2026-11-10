@@ -361,12 +361,52 @@ export function buildPepero(scene, ctx) {
   });
   boxes.forEach((b) => lands.push([new THREE.BoxGeometry(b.s * 1.2, b.s, b.s * 1.2), new THREE.Vector3(b.x, b.s * 0.45, b.z), onSegs(b.segs)]));
 
+  // ---- treasure boxes for the 빼빼로 찾기 event: the same ten spots on every screen (the server knows them
+  // only by number, realtime park/Channel.BOXES). They sit on the loop path, which the sticks keep clear of
+  // on every device (small screens grow fewer sticks), so the spots never depend on the forest's layout.
+  const chests = [];
+  const LID = ['#F6B6C8', '#A9DCC9', '#F6DE8D', '#CDB8E8', '#A9CBEE'];
+  const wood = mat('#B07A4A'), trim = mat('#F2C94C');
+  for (let k = 0; k < 10; k++) {
+    const a = 0.31 + (k / 10) * Math.PI * 2;
+    const x = C.x + Math.cos(a) * 10.9, z = C.z + Math.sin(a) * 10.9;
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = -a + Math.PI / 2;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.42, 0.5), wood);
+    body.position.y = 0.21;
+    body.castShadow = true;
+    g.add(body);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.07, 0.52), trim);
+    band.position.y = 0.36;
+    g.add(band);
+    // the lid hinges at the back edge
+    const lid = new THREE.Group();
+    lid.position.set(0, 0.42, -0.25);
+    g.add(lid);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.7, 12, 1, false, 0, Math.PI), mat(LID[k % LID.length]));
+    top.rotation.z = Math.PI / 2;
+    top.position.z = 0.25;
+    lid.add(top);
+    const lock = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.04), trim);
+    lock.position.set(0, 0.0, 0.51);
+    lid.add(lock);
+    // a little star that bobs over a box you can open
+    const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.13), new THREE.MeshBasicMaterial({ color: 0xfff1a8 }));
+    star.position.y = 1.0;
+    g.add(star);
+    scene.add(g);
+    chests.push({ x, z, group: g, lid, star });
+  }
+
   // ---- ground rules ------------------------------------------------------------------------
   const inForest = (x, z) => Math.hypot(x - C.x, z - C.z) < C.r - 0.8;
   const onRoad = (x, z) => Math.abs(x) < ROAD_HALF && z > parkR - 2 && z < gateZ + 3;
   return {
     segs,
     lands,
+    /** the 빼빼로 찾기 boxes, by number: { x, z, group, lid, star } */
+    chests,
     /** Where my bird comes down when it flies over from the park. */
     arrival: new THREE.Vector3(0, 0, gateZ + 3.5),
     /** Where it comes down back in the park. */

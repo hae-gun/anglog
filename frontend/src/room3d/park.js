@@ -90,19 +90,21 @@ const SLOT_ANGLES = (() => {
 
 /**
  * cards: RoomCard-like { owner, parrots, postedToday, mine? } in slot order.
- * opts.visitor: { name, colors, species }.
+ * opts.visitor: { name, colors, species, wear } (wear: lib/wardrobe.ts wearList).
  * Callbacks: onEnter(handle), onBirdTap({ handle|null, nickname|null, birdName, remote }), onEmptyLot().
  * Pranks: onPrank(pid, kind) when I prank a live bird (the page asks the server), onPranked({ id, name, remote, kind, back })
  * when a bird pranks me or answers back, onAnswered({ id, name, remote, answer }) when one makes up (1) or flies off (2).
  * opts.startAt: a handle to come out of (back from that house), or null to fly in at the gate.
  * onTutorial(e): 'chorus' when birds sang my chirps back, 'pranked' when I pranked 모란이, 'nearDoor' the first time I reach a door.
+ * onChest(i): I am standing at 빼빼로 숲 box i that can be opened (-1: none any more).
  * @param {HTMLElement} container
  * @param {any[]} cards
  * @param {{ visitor: any, startAt?: string | null, onEnter?: (h: string) => void, onBirdTap?: (who: any) => void, onEmptyLot?: () => void,
  *   onPrank?: (pid: number, k: number) => void, onPranked?: (who: any) => void, onAnswered?: (who: any) => void,
- *   onZone?: (zone: 'park' | 'pepero') => void, onTutorial?: (e: 'chorus' | 'pranked' | 'nearDoor') => void }} opts
+ *   onZone?: (zone: 'park' | 'pepero') => void, onTutorial?: (e: 'chorus' | 'pranked' | 'nearDoor') => void,
+ *   onChest?: (box: number) => void }} opts
  */
-export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot, onPrank, onPranked, onAnswered, onZone, onTutorial } = /** @type {any} */ ({})) {
+export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot, onPrank, onPranked, onAnswered, onZone, onTutorial, onChest } = /** @type {any} */ ({})) {
   const env = skyNow();
   const small = Math.min(window.innerWidth, window.innerHeight) < 720;
   // ?night=1 and ?weather=rain|snow|clear try out the other looks (for checking, and for fun)
@@ -1296,7 +1298,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       residents.push(r);
     });
   });
-  const pb = makeBird(visitor.colors, visitor.species);
+  const pb = makeBird(visitor.colors, visitor.species, visitor.wear);
   scene.add(pb.group);
   const player = actor(pb, visitor.name, { isPlayer: true });
   let view = 'third'; // 'third': camera behind and following, 'first': through the bird's eyes
@@ -1838,7 +1840,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   // ---- remote players (other people online) ------------------------------------------------------
   const remotes = new Map();
   function remoteActor(pid, lk, s) {
-    const b = makeBird(lk.colors, lk.species);
+    const b = makeBird(lk.colors, lk.species, lk.wear);
     scene.add(b.group);
     const a = actor(b, lk.name, { remote: { pid, home: lk.home || null, target: new THREE.Vector3(s.x, s.y, s.z), ry: s.ry || 0, m: s.m || 0, calm: !!s.calm } });
     a.pos.set(s.x, s.y, s.z);
@@ -2366,6 +2368,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
         onTutorial('nearDoor');
       }
     }
+    stepChests();
     if (tutMarker) {
       const { ring, arrow } = tutMarker.userData;
       const k = 1 + 0.12 * Math.sin(clock * 4);
@@ -2725,6 +2728,60 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   }
   const SITTING = ['branch', 'perch', 'canopy', 'swing', 'roof'];
 
+  // ---- 빼빼로 찾기: treasure boxes in the 빼빼로 숲. Who gets a box is decided by the server (or the page,
+  // when playing alone); here they only open, hide, come back, and tell the page when I stand at one ----
+  const chests = pep ? pep.chests.map((c) => ({ ...c, away: false, openT: -99, backT: -99 })) : [];
+  let chestNear = -1;
+  let chestCheckAt = 0;
+  const pops = [];
+  function stepChests() {
+    chests.forEach((c, i) => {
+      if (c.away) {
+        const k = clock - c.openT;
+        c.lid.rotation.x = -Math.min(1, k * 4) * 1.9;
+        c.group.scale.setScalar(k < 1.3 ? 1 : Math.max(0.001, 1 - (k - 1.3) * 3));
+        c.star.visible = false;
+      } else {
+        c.lid.rotation.x = 0;
+        const k = clock - c.backT;
+        // pops back in with a little bounce
+        c.group.scale.setScalar(k >= 0.5 ? 1 : Math.max(0.001, Math.sin(Math.min(1, k * 2) * Math.PI * 0.75) / Math.sin(Math.PI * 0.75)));
+        c.star.visible = true;
+        c.star.position.y = 1.0 + Math.sin(clock * 3 + i) * 0.12;
+        c.star.rotation.y = clock * 2;
+      }
+    });
+    for (let i = pops.length - 1; i >= 0; i--) {
+      const p = pops[i], k = (clock - p.t) / 1.1;
+      p.m.position.y = p.y0 + k * 1.4;
+      p.m.rotation.y = k * 8;
+      if (k >= 1) { scene.remove(p.m); p.m.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); pops.splice(i, 1); }
+    }
+    if (!onChest || clock < chestCheckAt) return;
+    chestCheckAt = clock + 0.2;
+    let near = -1, bd = 1.8;
+    if (zoneNow === 'pepero' && !flying && !entering) {
+      chests.forEach((c, i) => {
+        const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z);
+        if (!c.away && d < bd) { bd = d; near = i; }
+      });
+    }
+    if (near !== chestNear) { chestNear = near; onChest(near); }
+  }
+  function popPepero(c) {
+    const g = new THREE.Group();
+    const coat = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 10), toon('#5A3322'));
+    coat.position.y = 0.1;
+    g.add(coat);
+    const biscuit = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 8), toon('#E3B574'));
+    biscuit.position.y = -0.24;
+    g.add(biscuit);
+    g.position.set(c.x, 0.6, c.z);
+    g.rotation.z = 0.3;
+    scene.add(g);
+    pops.push({ m: g, t: clock, y0: 0.6 });
+  }
+
   // ---- what the page can call ----------------------------------------------------------------
   const api = {
     /** Joystick vector, x right and y forward, each -1..1. */
@@ -2859,6 +2916,40 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
           dropActor(g);
         });
       });
+    },
+
+    // ---- 빼빼로 찾기 boxes ----
+    /** Box i was opened (by me or by someone else). */
+    chestOpened(i, mine) {
+      const c = chests[i];
+      if (!c || c.away) return;
+      c.away = true;
+      c.openT = clock;
+      if (!mine) return;
+      player.move = null;
+      player.rotTarget = angleTo(player.pos, new THREE.Vector3(c.x, 0, c.z));
+      act(player, 'CHIRP', 0.9);
+      popPepero(c);
+      heartsAt(player, 3);
+      playCall('chirp', 1.15, 0.9);
+      say(player, pick(L(['빼빼로 찾았다!', '하나 더!', '냄새만 맡을게', '반짝반짝!'], ['Found a Pepero!', 'One more!', 'Just a sniff', 'Shiny!'])), 1.4);
+    },
+    /** Box i is back (ten seconds later). */
+    chestBack(i) {
+      const c = chests[i];
+      if (!c || !c.away) return;
+      c.away = false;
+      c.backT = clock;
+    },
+    /** Boxes already open when I come in: hidden straight away. */
+    chestsAway(list) {
+      chests.forEach((c, i) => { c.away = list.includes(i); c.openT = clock - 9; c.backT = -99; });
+    },
+    chestFree: (i) => !!chests[i] && !chests[i].away,
+    /** The page answers that someone else was first: a little shrug. */
+    chestMissed() {
+      act(player, 'GRUMPY', 0.7);
+      say(player, pick(L(['앗, 늦었다', '다른 앵무가 먼저!'], ['Too late!', 'Someone beat me!'])), 1.3);
     },
 
     /** The nearest bird I could prank, or null. */
@@ -3004,7 +3095,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     /** Become another bird on the spot (owners with several birds). */
     swapBird(v) {
       const old = player.b;
-      const nb = makeBird(v.colors, v.species);
+      const nb = makeBird(v.colors, v.species, v.wear);
       nb.group.position.copy(old.group.position);
       nb.group.rotation.y = old.group.rotation.y;
       nb.group.visible = view !== 'first';

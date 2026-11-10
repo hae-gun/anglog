@@ -261,4 +261,17 @@ class ParkFlowTest {
             assertThat(again.awaitClose().getCode()).isEqualTo(CloseCodes.KICKED.getCode());
         }
     }
+
+    @Test
+    void firstBirdGetsTheBoxTheOtherHearsNo() throws Exception {
+        try (TestClient a = TestClient.connect(port); TestClient b = TestClient.connect(port)) {
+            int pa = a.hello("빠른새").path("pid").asInt();
+            JsonNode wb = b.hello("느린새");
+            assertThat(wb.path("boxesAway").isArray()).isTrue();
+            a.send("{\"type\":\"box\",\"i\":4}");
+            b.await("presence", m -> has(m, "boxes", x -> x.get(0).asInt() == 4 && x.get(1).asInt() == pa));
+            b.send("{\"type\":\"box\",\"i\":4}");
+            assertThat(b.await("boxNo").path("box").asInt()).isEqualTo(4);
+        }
+    }
 }

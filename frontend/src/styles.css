@@ -455,3 +455,22 @@ html[lang="en"] .park-plate.lit::after { content: 'New today'; }
 .park-tut-scarf { width: 26px; height: 14px; border-radius: 7px; border: 2px solid var(--ink); flex: none; }
 .room-tag.room-tag-guide { background: #FFE07A; color: var(--ink); border: 1.5px solid var(--ink); }
 @media (prefers-reduced-motion: reduce) { .park-tut { animation: none; } }
+
+/* ---- 옷장 ---- */
+.wardrobe { display: flex; flex-direction: column; gap: 8px; }
+.wardrobe-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 2px solid var(--ink); border-radius: 14px; background: var(--card); }
+.wardrobe-item > div { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wardrobe-item b { font: 16px/1.2 var(--display); }
+.wardrobe-item span { font-size: 13px; color: var(--muted); }
+.wardrobe-item.locked { opacity: 0.6; border-style: dashed; }
+.wardrobe-lock { white-space: nowrap; }
+.wardrobe-icon { width: 34px; height: 34px; flex: none; border-radius: 10px; border: 2px solid var(--ink); background: #EEE6D6; position: relative; }
+.wardrobe-icon.scarf::after { content: ''; position: absolute; left: 6px; right: 6px; top: 13px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.55); }
+.wardrobe-icon.pepero { background: linear-gradient(135deg, transparent 40%, #5A3322 40%, #5A3322 58%, transparent 58%), linear-gradient(135deg, #FFF3C4 0 100%); }
+.wardrobe-item.locked .wardrobe-icon { filter: grayscale(1); }
+
+/* ---- 빼빼로 찾기 ---- */
+.park-quest { top: calc(104px + env(safe-area-inset-top, 0px)); }
+.park-open-box { position: absolute; z-index: 6; left: 50%; bottom: calc(190px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 14px 26px; border: 2px solid var(--ink); border-radius: 999px; background: #F2C94C; box-shadow: 3px 3px 0 var(--ink); font: 19px/1 var(--display); color: var(--ink); animation: box-bob 1s ease-in-out infinite; touch-action: manipulation; }
+@keyframes box-bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -5px); } }
+@media (prefers-reduced-motion: reduce) { .park-open-box { animation: none; } }

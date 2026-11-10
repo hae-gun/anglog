@@ -14,11 +14,17 @@ public final class Messages {
     }
 
     /** How a bird looks. Always normalized by LookRules before it is stored or sent. */
-    public record Look(String name, String species, Colors colors, String home) {
+    /**
+     * wear: what the bird has on, like "scarf:#47B3A6" or "pepero" (frontend lib/wardrobe.ts). The server only
+     * checks the shape (LookRules), so a new item needs no server change.
+     */
+    public record Look(String name, String species, Colors colors, String home, List<String> wear) {
+        public Look(String name, String species, Colors colors, String home) {
+            this(name, species, colors, home, List.of());
+        }
     }
 
-    /** scarf: the knitted scarf from finishing the first walk with 모란이 (null when the bird has none). */
-    public record Colors(String face, String head, String body, String wing, String tail, String scarf) {
+    public record Colors(String face, String head, String body, String wing, String tail) {
     }
 
     /** Someone in the park: id within the channel, look, position, yaw, pose code, and whether they take pranks. */
@@ -32,10 +38,19 @@ public final class Messages {
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Welcome(String type, int v, int pid, int channel, int capacity, int online,
-                          long presenceMs, long moveMs, long heartbeatMs, List<PlayerView> players, Spot spot, boolean owner) {
+                          long presenceMs, long moveMs, long heartbeatMs, List<PlayerView> players, Spot spot, boolean owner,
+                          List<Integer> boxesAway) {
         public static Welcome of(int v, int pid, int channel, int capacity, int online,
-                                 long presenceMs, long moveMs, long heartbeatMs, List<PlayerView> players, Spot spot, boolean owner) {
-            return new Welcome("welcome", v, pid, channel, capacity, online, presenceMs, moveMs, heartbeatMs, players, spot, owner);
+                                 long presenceMs, long moveMs, long heartbeatMs, List<PlayerView> players, Spot spot, boolean owner,
+                                 List<Integer> boxesAway) {
+            return new Welcome("welcome", v, pid, channel, capacity, online, presenceMs, moveMs, heartbeatMs, players, spot, owner, boxesAway);
+        }
+    }
+
+    /** To the bird that tried to open a box someone else got to first. */
+    public record BoxNo(String type, int box) {
+        public static BoxNo of(int box) {
+            return new BoxNo("boxNo", box);
         }
     }
 
@@ -70,13 +85,14 @@ public final class Messages {
      * calms: [pid, 1 or 0]. Empty lists are left out.
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    /** boxes: [box, pid] when someone opened a 빼빼로 숲 box, [box, 0] when it came back (규약 11장). */
     public record Presence(String type, int channel, int online, List<PlayerView> joined, List<Object[]> moved,
                            List<Integer> left, List<LookChange> looks, List<Object[]> emotes, List<int[]> says,
-                           List<int[]> pranks, List<int[]> answers, List<int[]> calms) {
+                           List<int[]> pranks, List<int[]> answers, List<int[]> calms, List<int[]> boxes) {
         public static Presence of(int channel, int online, List<PlayerView> joined, List<Object[]> moved,
                                   List<Integer> left, List<LookChange> looks, List<Object[]> emotes, List<int[]> says,
-                                  List<int[]> pranks, List<int[]> answers, List<int[]> calms) {
-            return new Presence("presence", channel, online, joined, moved, left, looks, emotes, says, pranks, answers, calms);
+                                  List<int[]> pranks, List<int[]> answers, List<int[]> calms, List<int[]> boxes) {
+            return new Presence("presence", channel, online, joined, moved, left, looks, emotes, says, pranks, answers, calms, boxes);
         }
     }
 

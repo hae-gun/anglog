@@ -11,6 +11,8 @@ export interface NetLook {
   colors: ParrotColors;
   /** the 앵로그 handle of a logged-in bird owner, so others can visit the house */
   home?: string | null;
+  /** what it has on (lib/wardrobe.ts wearList), e.g. ["scarf:#47B3A6", "pepero"] */
+  wear?: string[];
 }
 export interface NetState {
   x: number;
@@ -49,6 +51,12 @@ export interface NetHandlers {
   answer(from: number, to: number, a: number, toMe: boolean): void;
   calm(pid: number, on: boolean): void;
   prankNo(to: number, why: PrankNo): void;
+  /** 빼빼로 숲 boxes: opened by someone (mine: by me), come back, or someone else was first */
+  box(i: number, mine: boolean): void;
+  boxBack(i: number): void;
+  boxNo(i: number): void;
+  /** boxes already open when I came in */
+  boxesAway(list: number[]): void;
 }
 
 export interface NetClient {
@@ -58,6 +66,8 @@ export interface NetClient {
   prank(to: number, k: number): void;
   answer(to: number, a: number): void;
   setCalm(on: boolean): void;
+  /** Try to open 빼빼로 숲 box i; the server answers in the next presence (or with boxNo). */
+  openBox(i: number): void;
   close(): void;
 }
 
@@ -126,6 +136,7 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
           me = msg.pid;
           on.status('online');
           on.welcome((msg.players ?? []).filter((p: NetPlayer) => p.pid !== me), msg.online ?? 1, msg.spot ?? null);
+          on.boxesAway(msg.boxesAway ?? []);
           lastSent = '';
           window.clearInterval(moveTimer);
           moveTimer = window.setInterval(sendMove, Math.max(200, msg.moveMs ?? 200));
@@ -140,6 +151,7 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
           (msg.emotes ?? []).forEach((e: [number, string]) => e[0] !== me && on.emote(e[0], e[1]));
           (msg.says ?? []).forEach((e: [number, number]) => e[0] !== me && on.say(e[0], e[1]));
           (msg.calms ?? []).forEach((c: [number, number]) => c[0] !== me && on.calm(c[0], c[1] === 1));
+          (msg.boxes ?? []).forEach((b: [number, number]) => (b[1] === 0 ? on.boxBack(b[0]) : on.box(b[0], b[1] === me)));
           (msg.pranks ?? []).forEach((e: [number, number, number]) => e[0] !== me && on.prank(e[0], e[1], e[2], e[1] === me));
           (msg.answers ?? []).forEach((e: [number, number, number]) => e[0] !== me && on.answer(e[0], e[1], e[2], e[1] === me));
           (msg.left ?? []).forEach((pid: number) => on.left(pid));
@@ -154,6 +166,9 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
           break;
         case 'prankNo':
           on.prankNo(msg.to, msg.why);
+          break;
+        case 'boxNo':
+          on.boxNo(msg.box);
           break;
         default:
           break;
@@ -230,6 +245,9 @@ export function connectPark(url: string, firstLook: NetLook, getState: () => Net
     setCalm(on) {
       calm = on;
       send({ type: 'calm', on });
+    },
+    openBox(i) {
+      send({ type: 'box', i });
     },
     close() {
       closedByUs = true;

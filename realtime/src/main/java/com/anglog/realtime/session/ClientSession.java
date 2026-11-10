@@ -84,6 +84,17 @@ public final class ClientSession {
         return true;
     }
 
+    private long lastBoxAt;
+
+    /** One box try at a time (a held-down button cannot sweep the forest). */
+    public synchronized boolean acceptBox(long now, long gapMs) {
+        if (lastBoxAt != 0 && now - lastBoxAt < gapMs) {
+            return false;
+        }
+        lastBoxAt = now;
+        return true;
+    }
+
     public synchronized boolean acceptCalm(long now, long gapMs) {
         if (lastCalmAt != 0 && now - lastCalmAt < gapMs) {
             return false;

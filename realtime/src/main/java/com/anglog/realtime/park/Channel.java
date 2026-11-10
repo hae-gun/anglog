@@ -21,8 +21,15 @@ public final class Channel {
     /** What changed since the last tick. */
     public record Batch(int online, List<PlayerView> joined, List<Object[]> moved, List<Integer> left,
                         List<LookChange> looks, List<Object[]> emotes, List<int[]> says,
-                        List<int[]> pranks, List<int[]> answers, List<int[]> calms) {
+                        List<int[]> pranks, List<int[]> answers, List<int[]> calms, List<int[]> boxes) {
     }
+
+    /**
+     * 빼빼로 숲 boxes (the November event): BOXES spots laid out the same on every screen (frontend
+     * room3d/pepero.js). The first bird to open one gets it; it comes back BOX_BACK_MS later.
+     */
+    public static final int BOXES = 10;
+    public static final long BOX_BACK_MS = 10_000;
 
     /** What happened to a prank. Everything but OK is told only to the prankster. */
     public enum PrankResult { OK, GONE, CALM, FAR, WAIT, BLOCKED }
@@ -57,6 +64,8 @@ public final class Channel {
     private final List<int[]> pranks = new ArrayList<>();
     private final List<int[]> answers = new ArrayList<>();
     private final List<int[]> calms = new ArrayList<>();
+    private final List<int[]> boxes = new ArrayList<>();
+    private final long[] boxBackAt = new long[BOXES]; // 0: there to open
 
     // per (prankster, target) pair; cleared when either leaves, so at most capacity squared entries
     private final Map<Long, Long> lastPrankAt = new HashMap<>();
@@ -249,9 +258,40 @@ public final class Channel {
     }
 
     /** @return the changes since the last call, or null when nothing changed */
+    /** @return true when this bird got the box; false when it is not there (someone was first) or no such box */
+    public synchronized boolean openBox(int pid, int box, long now) {
+        if (box < 0 || box >= BOXES || !players.containsKey(pid) || boxBackAt[box] != 0) {
+            return false;
+        }
+        boxBackAt[box] = now + BOX_BACK_MS;
+        boxes.add(new int[] {box, pid});
+        return true;
+    }
+
+    /** Boxes opened and not back yet, for a bird that just came in. */
+    public synchronized List<Integer> boxesAway() {
+        List<Integer> out = new ArrayList<>();
+        for (int i = 0; i < BOXES; i++) {
+            if (boxBackAt[i] != 0) {
+                out.add(i);
+            }
+        }
+        return out;
+    }
+
     public synchronized Batch drain() {
+        return drain(System.currentTimeMillis());
+    }
+
+    public synchronized Batch drain(long now) {
+        for (int i = 0; i < BOXES; i++) {
+            if (boxBackAt[i] != 0 && boxBackAt[i] <= now) {
+                boxBackAt[i] = 0;
+                boxes.add(new int[] {i, 0});
+            }
+        }
         if (joined.isEmpty() && moved.isEmpty() && looked.isEmpty() && left.isEmpty() && emotes.isEmpty() && says.isEmpty()
-                && pranks.isEmpty() && answers.isEmpty() && calms.isEmpty()) {
+                && pranks.isEmpty() && answers.isEmpty() && calms.isEmpty() && boxes.isEmpty()) {
             return null;
         }
         List<PlayerView> j = new ArrayList<>(joined.size());
@@ -268,7 +308,7 @@ public final class Channel {
             l.add(new LookChange(pid, players.get(pid).look));
         }
         Batch batch = new Batch(players.size(), j, m, List.copyOf(left), l, List.copyOf(emotes), List.copyOf(says),
-                List.copyOf(pranks), List.copyOf(answers), List.copyOf(calms));
+                List.copyOf(pranks), List.copyOf(answers), List.copyOf(calms), List.copyOf(boxes));
         joined.clear();
         moved.clear();
         looked.clear();
@@ -278,6 +318,7 @@ public final class Channel {
         pranks.clear();
         answers.clear();
         calms.clear();
+        boxes.clear();
         return batch;
     }
 }

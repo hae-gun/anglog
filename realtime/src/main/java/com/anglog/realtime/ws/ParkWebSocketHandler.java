@@ -10,6 +10,7 @@ import com.anglog.realtime.protocol.Messages;
 import com.anglog.realtime.protocol.Messages.ErrorMessage;
 import com.anglog.realtime.protocol.Messages.Look;
 import com.anglog.realtime.protocol.Messages.Pong;
+import com.anglog.realtime.protocol.Messages.BoxNo;
 import com.anglog.realtime.protocol.Messages.Kicked;
 import com.anglog.realtime.protocol.Messages.PrankNo;
 import com.anglog.realtime.protocol.Messages.Replaced;
@@ -49,6 +50,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
     private static final int SEND_BUFFER_LIMIT_BYTES = 128 * 1024;
     static final Set<String> EMOTES = Set.of("chirp", "dance");
     private static final long CALM_MIN_GAP_MS = 1_000;
+    private static final long BOX_MIN_GAP_MS = 400;
 
     private final ParkProperties props;
     private final SessionRegistry registry;
@@ -153,6 +155,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
             case "prank" -> onPrank(session, msg);
             case "answer" -> onAnswer(session, msg);
             case "calm" -> onCalm(session, msg);
+            case "box" -> onBox(session, msg);
             default -> sender.send(session, ErrorMessage.of(Messages.ERR_UNKNOWN_TYPE, "unknown type: " + type));
         }
     }
@@ -197,7 +200,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         }
         Look raw = looks.normalize(msg.get("look"));
         // the house link shows only when the browser asks for it (a bird of my own) and the token proves whose it is
-        Look look = new Look(raw.name(), raw.species(), raw.colors(), owner != null && raw.home() != null ? owner.handle() : null);
+        Look look = new Look(raw.name(), raw.species(), raw.colors(), owner != null && raw.home() != null ? owner.handle() : null, raw.wear());
         Channels.Joined joined = channels.enter(look, pose, msg.path("calm").asBoolean(false));
         Channel channel = joined.channel();
         session.ready(channel.no(), joined.pid(), now);
@@ -207,7 +210,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         registry.joinChannel(session);
         sender.send(session, Welcome.of(props.protocolVersion(), joined.pid(), channel.no(), props.channelCapacity(),
                 channel.size(), props.presenceMs(), props.moveMinGapMs() + 50, props.heartbeatMs(),
-                channel.snapshot(joined.pid()), Spot.of(spot), owner != null));
+                channel.snapshot(joined.pid()), Spot.of(spot), owner != null, channel.boxesAway()));
     }
 
     private void onPing(ClientSession session, JsonNode msg) {
@@ -237,7 +240,7 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         Channel channel = channels.get(session.channelNo());
         if (channel != null) {
             Look raw = looks.normalize(msg.get("look"));
-            channel.look(session.pid(), new Look(raw.name(), raw.species(), raw.colors(), raw.home() != null ? session.home() : null));
+            channel.look(session.pid(), new Look(raw.name(), raw.species(), raw.colors(), raw.home() != null ? session.home() : null, raw.wear()));
         }
     }
 
@@ -261,6 +264,18 @@ public class ParkWebSocketHandler extends TextWebSocketHandler {
         Channel channel = channels.get(session.channelNo());
         if (channel != null) {
             channel.say(session.pid(), n.asInt());
+        }
+    }
+
+    /** 빼빼로 숲: open box i. The first one gets it (in the next presence); a late one hears boxNo. */
+    private void onBox(ClientSession session, JsonNode msg) {
+        JsonNode i = msg.get("i");
+        if (i == null || !i.isInt() || !session.acceptBox(now(), BOX_MIN_GAP_MS)) {
+            return;
+        }
+        Channel channel = channels.get(session.channelNo());
+        if (channel != null && !channel.openBox(session.pid(), i.asInt(), now())) {
+            sender.send(session, BoxNo.of(i.asInt()));
         }
     }
 

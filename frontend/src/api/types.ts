@@ -18,8 +18,6 @@ export interface ParrotColors {
   body: string;
   wing: string;
   tail: string;
-  /** only in 앵파크: the scarf from the first walk with 모란이 (lib/scarf.ts), never saved to the server */
-  scarf?: string;
 }
 
 export interface Parrot {

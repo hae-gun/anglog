@@ -13,7 +13,7 @@ import { isMuted, setMuted } from '../lib/sound';
 import { musicOn, setMusicOn, startAmbience, stopAmbience } from '../lib/ambience';
 import { mountPark } from '../room3d/park.js';
 import { ParkTutorial, TutorialPark } from '../components/ParkTutorial';
-import { giveScarf, loadScarf } from '../lib/scarf';
+import { giveItem, ItemId, ITEMS, loadWardrobe, setWorn, wearList } from '../lib/wardrobe';
 import { useSession } from '../session';
 import { isEn, tr } from '../i18n';
 
@@ -21,7 +21,7 @@ interface Controller extends TutorialPark {
   setInput(x: number, y: number): void;
   toggleFly(): boolean;
   setView(v: 'third' | 'first'): 'third' | 'first';
-  swapBird(v: { name: string; colors: NetLook['colors']; species: NetLook['species'] }): void;
+  swapBird(v: { name: string; colors: NetLook['colors']; species: NetLook['species']; wear?: string[] }): void;
   setClimb(dir: number): void;
   isFlying(): boolean;
   chirp(): void;
@@ -40,6 +40,11 @@ interface Controller extends TutorialPark {
   removeRemote(pid: number): void;
   clearRemotes(): void;
   placeAt(spot: NetSpot): boolean;
+  chestOpened(i: number, mine: boolean): void;
+  chestBack(i: number): void;
+  chestsAway(list: number[]): void;
+  chestFree(i: number): boolean;
+  chestMissed(): void;
   emoteRemote(pid: number, id: string): void;
   sayRemote(pid: number, text: string): void;
   prankTarget(): (Who & { calm: boolean }) | null;
@@ -61,6 +66,10 @@ const INVITE_KEY = 'anglog-invite-seen';
 const INVITE_AFTER_MS = 3 * 60 * 1000;
 const BIRD_KEY = 'anglog-park-bird';
 const TUT_KEY = 'anglog-park-tutorial';
+// 빼빼로 찾기(11월 빼빼로 숲): 상자에서 찾은 빼빼로 수(이 기기), 다 모으면 빼빼로 물기
+const PEP_KEY = 'anglog-pepero-found';
+const PEP_GOAL = 5;
+const BOX_BACK_MS = 10_000; // realtime park/Channel.BOX_BACK_MS, for playing alone
 const DOOR_TIP_KEY = 'anglog-park-door-tip';
 const VIEW_KEY = 'anglog-park-view';
 const CALM_KEY = 'anglog-park-calm';
@@ -127,7 +136,7 @@ export function ParkPage() {
   const [rooms, setRooms] = useState<RoomCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guest, setGuest] = useState<GuestBird>(loadGuestBird);
-  const [sheet, setSheet] = useState<null | 'list' | 'dress' | 'say' | 'birds' | 'prank' | 'more'>(null);
+  const [sheet, setSheet] = useState<null | 'list' | 'dress' | 'say' | 'birds' | 'prank' | 'more' | 'wardrobe'>(null);
   const [calm, setCalm] = useState(() => readKey(CALM_KEY) === '1');
   const calmRef = useRef(calm);
   calmRef.current = calm;
@@ -158,16 +167,65 @@ export function ParkPage() {
   tutorialRef.current = tutorial;
   const [tutRound, setTutRound] = useState(0);
   const tutEvents = useRef(new EventTarget());
-  const [scarf, setScarf] = useState(loadScarf);
+  // 옷장(받은 꾸미기 아이템과 입은 것). 이 기기에 기억
+  const [wardrobe, setWardrobe] = useState(loadWardrobe);
+  const wear = wearList(wardrobe);
+  const wardrobeRef = useRef(wardrobe);
+  wardrobeRef.current = wardrobe;
+  const [pepFound, setPepFound] = useState(() => Number(readKey(PEP_KEY)) || 0);
+  const [chestAt, setChestAt] = useState(-1);
+  const [pepReward, setPepReward] = useState(false);
+  const localBoxes = useRef<number[]>([]);
+  const boxWait = useRef(0);
   const baseBird = myBird ?? guest;
-  const visitor = scarf ? { ...baseBird, colors: { ...baseBird.colors, scarf } } : baseBird;
+  const visitor = { ...baseBird, wear };
   const visitorRef = useRef(visitor);
   visitorRef.current = visitor;
-  const visitorKey = `${visitor.name}|${visitor.species}|${visitor.colors.face}|${visitor.colors.head}|${visitor.colors.body}|${visitor.colors.wing}|${visitor.colors.tail}|${visitor.colors.scarf ?? ''}`;
+  const visitorKey = `${visitor.name}|${visitor.species}|${visitor.colors.face}|${visitor.colors.head}|${visitor.colors.body}|${visitor.colors.wing}|${visitor.colors.tail}|${wear.join(',')}`;
   const mountedKey = useRef('');
   const viewRef = useRef(view);
   viewRef.current = view;
-  const netLook: NetLook = { name: visitor.name, species: visitor.species, colors: visitor.colors, home: myBird && me ? me.handle : null };
+  // 빼빼로 찾기: one more found. The fifth one gives the 빼빼로 물기 item (and puts it on)
+  const pepFoundRef = useRef(pepFound);
+  const gotPepero = () => {
+    const next = pepFoundRef.current + 1;
+    pepFoundRef.current = next;
+    setPepFound(next);
+    writeKey(PEP_KEY, String(next));
+    if (next >= PEP_GOAL && !wardrobeRef.current.owned.pepero) {
+      setWardrobe(giveItem('pepero'));
+      setPepReward(true);
+    }
+  };
+  const gotPeperoRef = useRef(gotPepero);
+  gotPeperoRef.current = gotPepero;
+  // the server decides who gets a box; alone (no server, or not connected) this page does
+  const openChest = () => {
+    const i = chestAt;
+    const c = ctl.current;
+    if (i < 0 || !c) return;
+    if (net.current && status === 'online') {
+      net.current.openBox(i);
+      // a server from before the boxes never answers: then this page decides, like playing alone
+      window.clearTimeout(boxWait.current);
+      boxWait.current = window.setTimeout(() => {
+        boxWait.current = 0;
+        if (ctl.current?.chestFree(i)) openAlone(i);
+      }, 2000);
+      return;
+    }
+    openAlone(i);
+  };
+  const openAlone = (i: number) => {
+    const c = ctl.current;
+    if (!c || !c.chestFree(i)) return;
+    c.chestOpened(i, true);
+    gotPepero();
+    localBoxes.current.push(window.setTimeout(() => ctl.current?.chestBack(i), BOX_BACK_MS));
+  };
+  useEffect(() => () => { localBoxes.current.forEach(clearTimeout); window.clearTimeout(boxWait.current); }, []);
+
+  const netLook: NetLook = { name: visitor.name, species: visitor.species, colors: visitor.colors, home: myBird && me ? me.handle : null, wear };
   const lookRef = useRef(netLook);
   lookRef.current = netLook;
 
@@ -212,11 +270,12 @@ export function ParkPage() {
     try {
       const v = visitorRef.current;
       const c = mountPark(stage.current, houses, {
-        visitor: { name: v.name, colors: v.colors, species: v.species },
+        visitor: { name: v.name, colors: v.colors, species: v.species, wear: v.wear },
         startAt: startAt.current,
         onEnter: (handle: string) => navigate(`/play/${handle}`),
         onBirdTap: (who: BirdPop) => setBird(who),
         onZone: (z: 'park' | 'pepero') => setZone(z),
+        onChest: (i: number) => setChestAt(i),
         onTutorial: (e: 'chorus' | 'pranked' | 'nearDoor') => {
           if (e !== 'nearDoor') { tutEvents.current.dispatchEvent(new Event(e)); return; }
           if (tutorialRef.current || readKey(DOOR_TIP_KEY)) return;
@@ -265,7 +324,7 @@ export function ParkPage() {
     if (!ctl.current || mountedKey.current === visitorKey) return;
     mountedKey.current = visitorKey;
     const v = visitorRef.current;
-    ctl.current.swapBird({ name: v.name, colors: v.colors, species: v.species });
+    ctl.current.swapBird({ name: v.name, colors: v.colors, species: v.species, wear: v.wear });
   }, [visitorKey]);
 
   // ---- other people, live
@@ -315,6 +374,20 @@ export function ParkPage() {
         ctl.current?.calmRemote(pid, on);
       },
       prankNo: (_to, why) => setToast(PRANK_NO[why] ?? tr('지금은 장난칠 수 없어요.', 'No pranks right now.')),
+      box(i, mine) {
+        if (mine) { window.clearTimeout(boxWait.current); boxWait.current = 0; }
+        if (!ctl.current?.chestFree(i)) return;
+        ctl.current.chestOpened(i, mine);
+        if (mine) gotPeperoRef.current();
+      },
+      boxBack: (i) => ctl.current?.chestBack(i),
+      boxNo() {
+        window.clearTimeout(boxWait.current);
+        boxWait.current = 0;
+        ctl.current?.chestMissed();
+        setToast(tr('다른 앵무가 먼저 열었어요!', 'Another bird got there first!'));
+      },
+      boxesAway: (list) => ctl.current?.chestsAway(list),
       say: (pid, n) => { if (phraseText(n)) ctl.current?.sayRemote(pid, phraseText(n)!); },
       online: setOnline,
     }, calmRef.current, async () => {
@@ -430,6 +503,7 @@ export function ParkPage() {
       : { get label() { return tr('꾸미기', 'Dress up'); }, run: () => setSheet('dress') },
     { get label() { return tr('아무 집', 'Random house'); }, run: () => { setSheet(null); surf(); } },
     { get label() { return tr('집 목록', 'Houses'); }, run: () => setSheet('list') },
+    { get label() { return tr('옷장', 'Wardrobe'); }, run: () => setSheet('wardrobe') },
     { get label() { return tr('첫 산책 다시', 'Tutorial'); }, run: () => { setSheet(null); setTutRound((n) => n + 1); setTutorial(true); } },
     { label: view === 'first' ? tr('3인칭으로', 'Third person') : tr('1인칭으로', 'First person'), run: () => { setSheet(null); toggleView(); } },
     { label: muted ? tr('소리 켜기', 'Sound on') : tr('소리 끄기', 'Sound off'), run: () => { setMuted(!muted); setMute(!muted); } },
@@ -469,13 +543,37 @@ export function ParkPage() {
       {error && hint && <p className="play-note park-note" role="alert">{error}</p>}
       {broken && <p className="play-note park-note">{tr('이 기기에서는 3D 앵파크를 열 수 없어요. 집 목록으로 놀러가 주세요.', 'This device cannot open the 3D park. Visit houses from the list instead.')}</p>}
       {!rooms && !error && <p className="park-hint">{tr('앵파크 문 여는 중', 'Opening the park')}</p>}
+      {zone === 'pepero' && !wardrobe.owned.pepero && !pepReward && (
+        <div className="park-tut park-quest" role="status" aria-live="polite">
+          <div className="park-tut-head">
+            <span className="park-tut-n">{Math.min(pepFound, PEP_GOAL)}/{PEP_GOAL}</span>
+            <b>{tr('빼빼로 찾기', 'Find the Pepero')}</b>
+          </div>
+          <p>{tr('반짝이는 상자를 열어 빼빼로를 찾으세요. 상자는 10초 뒤에 다시 생기고, 먼저 연 앵무만 가져가요.', 'Open the sparkling boxes to find Pepero. A box comes back after 10 seconds, and only the first bird gets it.')}</p>
+        </div>
+      )}
+      {chestAt >= 0 && zone === 'pepero' && !sheet && (
+        <button className="park-open-box" onClick={openChest}>{tr('상자 열기', 'Open the box')}</button>
+      )}
+      {pepReward && (
+        <div className="park-tut done" role="dialog" aria-label={tr('빼빼로 찾기 완료', 'Pepero found')}>
+          <div className="park-tut-head">
+            <span className="wardrobe-icon pepero" aria-hidden="true" />
+            <b>{tr('빼빼로 5개를 다 찾았어요! 빼빼로를 물었어요', 'All 5 found! Your bird holds a Pepero')}</b>
+          </div>
+          <p>{tr('초콜릿은 앵무에게 독이라 물고만 있어요. 옷장에서 벗고 입을 수 있어요.', 'Chocolate is poison to parrots, so it only holds it. Take it off or put it on in the wardrobe.')}</p>
+          <div className="row">
+            <button className="btn small primary" onClick={() => setPepReward(false)}>{tr('좋아요', 'Nice')}</button>
+          </div>
+        </div>
+      )}
       {tutorial && rooms && !broken && (
         <ParkTutorial
           key={tutRound}
           park={() => ctl.current}
           events={tutEvents.current}
           loggedIn={!!me}
-          onFinish={() => { const c = giveScarf(); setScarf(c); writeKey(TUT_KEY, '1'); return c; }}
+          onFinish={() => { const w = giveItem('scarf'); setWardrobe(w); writeKey(TUT_KEY, '1'); return w.owned.scarf?.color ?? '#E8573D'; }}
           onSkip={() => { writeKey(TUT_KEY, '1'); setTutorial(false); }}
         />
       )}
@@ -608,6 +706,31 @@ export function ParkPage() {
                   ))}
                 </div>
                 <p className="hint">{tr('앵파크에서는 정해진 말만 할 수 있어요.', 'In the park you can only say these lines.')}</p>
+              </>
+            )}
+
+            {sheet === 'wardrobe' && (
+              <>
+                <h2 className="section-title">{tr('옷장', 'Wardrobe')}</h2>
+                <p className="lede">{tr('받은 아이템을 입고 벗을 수 있어요. 입은 모습은 다른 앵무들 화면에도 보여요.', 'Put on or take off what you have got. Other birds see it too.')}</p>
+                <div className="wardrobe">
+                  {ITEMS.map((it) => {
+                    const owned = wardrobe.owned[it.id];
+                    const on = wardrobe.worn.includes(it.id);
+                    return (
+                      <div key={it.id} className={owned ? 'wardrobe-item' : 'wardrobe-item locked'}>
+                        <span className={`wardrobe-icon ${it.id}`} style={owned?.color ? { background: owned.color } : undefined} aria-hidden="true" />
+                        <div>
+                          <b>{it.name()}</b>
+                          {!owned && <span>{it.how()}</span>}
+                        </div>
+                        {owned
+                          ? <button className={on ? 'btn small' : 'btn small primary'} aria-pressed={on} onClick={() => setWardrobe(setWorn(it.id as ItemId, !on))}>{on ? tr('벗기', 'Take off') : tr('입기', 'Put on')}</button>
+                          : <span className="wardrobe-lock">{tr('아직 없음', 'Locked')}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             )}
 

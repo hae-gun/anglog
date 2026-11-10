@@ -193,8 +193,12 @@ function compact(obj) {
  * Builds a bird. Returns { group, pose(mood, t), size }.
  * group is for the caller to place, turn and scale (1 = normal); the species size sits inside it.
  */
-export function makeBird(colors, species) {
+export function makeBird(colors, species, wear = []) {
   const c = colors;
+  // what the bird has on (lib/wardrobe.ts): "scarf:#47B3A6" (an item with a colour) or "pepero"
+  const worn = {};
+  (wear || []).forEach((w) => { const [id, col] = String(w).split(':'); worn[id] = col || true; });
+  const scarfC = typeof worn.scarf === 'string' ? worn.scarf : null;
   const S = SHAPES[species] || SHAPES.OTHER;
   const wingC = c.wing;
   const midC = shade(wingC, 0.82);
@@ -318,27 +322,27 @@ export function makeBird(colors, species) {
   blob(head, c.body, -0.05, 0.12, 0, 0.33, 0.33, 0.33, 0, LW);
   // a knitted scarf (the reward for finishing the first walk with 모란이). It hangs from the head group,
   // snug right under the head, so it sits on the neck and follows the head as it moves
-  if (c.scarf) {
+  if (scarfC) {
     // wrapped on the outside where the head meets the body: low under the chin, high on the nape
     // (the body rises behind the head, so a flat ring would hide in it from behind)
     const scarf = new THREE.Group();
     scarf.position.set(-0.155, -0.051, 0);
     scarf.rotation.z = -0.55;
     head.add(scarf);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.085, 8, 26), toon(c.scarf));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.085, 8, 26), toon(scarfC));
     ring.rotation.x = Math.PI / 2;
     scarf.add(ring);
-    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.306, 0.032, 6, 26), toon(shade(c.scarf, 1.35)));
+    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.306, 0.032, 6, 26), toon(shade(scarfC, 1.35)));
     stripe.rotation.x = Math.PI / 2;
     stripe.position.y = 0.038;
     scarf.add(stripe);
     // a short end in front, two little tails hanging down the back
     [[0.240, -0.13, 0.1, 0.2, 0.22], [-0.320, -0.12, -0.06, -0.15, 0.26], [-0.290, -0.14, 0.07, -0.05, 0.22]].forEach(([x, y, z, rz, len]) => {
-      const end = new THREE.Mesh(new THREE.BoxGeometry(0.065, len, 0.12), toon(c.scarf));
+      const end = new THREE.Mesh(new THREE.BoxGeometry(0.065, len, 0.12), toon(scarfC));
       end.position.set(x, y, z);
       end.rotation.z = rz;
       scarf.add(end);
-      const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.04, 0.124), toon(shade(c.scarf, 1.35)));
+      const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.04, 0.124), toon(shade(scarfC, 1.35)));
       fringe.position.set(0, -len / 2 + 0.01, 0);
       end.add(fringe);
     });
@@ -387,6 +391,24 @@ export function makeBird(colors, species) {
   head.add(beak);
   blob(beak, shade(beakC, 0.86), 0.03, -0.075 * beakK, 0, 0.07 * beakK, 0.05 * beakK, 0.065 * beakK, -0.3, LW * 0.7, SPH_LO);
   blob(beak, beakC, 0.02, 0, 0, 0.13 * beakK, 0.1 * beakK, 0.09 * beakK, -0.35, LW * 0.7, BEAK);
+  // a 빼빼로 held crosswise in the beak (the 빼빼로 숲 event prize). Only held: chocolate is poison to parrots
+  if (worn.pepero) {
+    const stick = new THREE.Group();
+    stick.position.set(0.05 * beakK, -0.045 * beakK, 0.05);
+    stick.rotation.set(0.12, 0.25, 0.08);
+    beak.add(stick);
+    const coat = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.62, 10), toon('#5A3322'));
+    coat.rotation.x = Math.PI / 2;
+    coat.position.z = -0.08;
+    stick.add(coat);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.036, 10, 6), toon('#5A3322'));
+    tip.position.z = -0.39;
+    stick.add(tip);
+    const biscuit = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.22, 8), toon('#E3B574'));
+    biscuit.rotation.x = Math.PI / 2;
+    biscuit.position.z = 0.34;
+    stick.add(biscuit);
+  }
   if (species === 'BUDGIE') {
     // budgies' beaks sit half inside the face feathers
     blob(head, c.face, 0.26, -0.02, 0, 0.12, 0.13, 0.15);

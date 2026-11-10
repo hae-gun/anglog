@@ -26,7 +26,9 @@
   - src/api: types.ts(API 모양), http.ts(실서버. VITE_API_BASE가 있으면 그 주소로 credentials include, /media/ 주소도 앞에 붙임), mock.ts(가짜 서버, `npm run dev:mock`)
   - src/room3d: 3D 방과 앵무 모델 (plain JS). scene.js 방 꾸밈, room.js 프로필 방, play.js 방에서 놀기, park.js 앵파크(가을 공원과 강가 산책로. 앉을 곳은 모두 perchSegs, 걸을 수 있는 곳은 walkable, 물은 waterAt. 3인칭은 걸으면 카메라가 등 뒤로 따라 돌고, 버튼으로 1인칭 전환). pepero.js 빼빼로 숲(11월 이벤트 옆 공간, 북쪽. 기간 밖에는 안 만든다)
   - src/lib/photoColors.ts: 앵무 색 고르기에서 사진(고르기, 붙여넣기, 끌어놓기)으로 종을 추정하고 부위별 색을 뽑는다. 이 기기에서만 색 계산(배경 지우기, Lab k-means, 색 조합으로 종 점수)하고 사진은 올리지 않는다. 그림 인식이 아니라 색 추론이라 결과는 추정으로 보여 준다
-  - components/ParkTutorial.tsx: 첫 산책 튜토리얼. 안내 앵무 모란이가 걷기, 둘러보기(내가 끈 만큼만 셈), 날아서 가지에 앉기, 짹짹 박자(모란이가 따라 부름), 모란이 찌르기를 하나씩 시키고 해내면 넘어간다. park.js는 모란이(residents에 들어가지만 think하지 않음)와 노란 고리, 화살표만 그린다(tutorialState, guideShow, markAhead, markPerch, onTutorial). 끝내면 lib/scarf.ts의 랜덤 색 목도리(이 기기 기억, colors.scarf로 실시간 서버를 거쳐 남에게도 보임). 처음 한 번만, 더보기의 첫 산책 다시로 또
+  - components/ParkTutorial.tsx: 첫 산책 튜토리얼. 안내 앵무 모란이가 걷기, 둘러보기(내가 끈 만큼만 셈), 날아서 가지에 앉기, 짹짹 박자(모란이가 따라 부름), 모란이 찌르기를 하나씩 시키고 해내면 넘어간다. park.js는 모란이(residents에 들어가지만 think하지 않음)와 노란 고리, 화살표만 그린다(tutorialState, guideShow, markAhead, markPerch, onTutorial). 끝내면 옷장에 랜덤 색 목도리. 처음 한 번만, 더보기의 첫 산책 다시로 또
+  - src/lib/wardrobe.ts: 옷장. 받은 꾸미기 아이템과 입은 것(이 기기 기억). 입은 것은 look.wear(["scarf:#47B3A6","pepero"])로 실시간 서버를 거쳐 남에게도 보이고, 모양은 bird.js makeBird(colors, species, wear)의 worn.<id>. 새 아이템은 ITEMS 한 줄과 bird.js 한 덩어리(서버는 모양만 확인해서 안 바꿔도 됨). 더보기의 옷장에서 입고 벗기
+  - 빼빼로 찾기(11월 빼빼로 숲): pepero.js 둘레길 위 상자 10개, 서버 Channel.openBox가 먼저 연 한 명만 주고 10초 뒤 되돌림(혼자 모드는 Park.tsx가 흉내). 5개 모으면 빼빼로 물기. 규약 12장
   - src/lib/ambience.ts: 앵파크 배경음. 파일 없이 Web Audio로 만든다(화창한 낮 공원: 96박 마림바 쿵짝 반주, 두 마디 리듬을 물음과 대답으로 되풀이하는 멜로디, 작은 셰이커, 먼 새소리. 아련하게 들리는 maj7과 add9, 긴 잔향, 느린 패드와 파도처럼 부푸는 바람은 쓰지 않는다). 첫 터치에 켜지고, 소리 끄기나 더보기의 음악 끄기로 멈춘다. renderAmbience로 같은 소리를 파일로 뽑을 수 있다
   - src/lib/parkNet.ts: 앵파크 실시간 클라이언트. VITE_REALTIME_URL이 없으면 dev에서는 ws://localhost:8090/ws, 가짜 서버 모드와 운영에서는 혼자 노는 모드
   - 첫 화면(/)은 누구에게나 앵파크(/park). 피드는 /feed. /park는 전체 화면 게임(헤더와 하단 메뉴 없음)
