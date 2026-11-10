@@ -319,21 +319,21 @@ export function makeBird(colors, species) {
   // a knitted scarf (the reward for finishing the first walk with 모란이). It hangs from the head group,
   // snug right under the head, so it sits on the neck and follows the head as it moves
   if (c.scarf) {
+    // wrapped on the outside where the head meets the body: low under the chin, high on the nape
+    // (the body rises behind the head, so a flat ring would hide in it from behind)
     const scarf = new THREE.Group();
-    scarf.position.set(-0.04, -0.2, 0);
-    scarf.rotation.z = 0.3;
+    scarf.position.set(-0.155, -0.051, 0);
+    scarf.rotation.z = -0.55;
     head.add(scarf);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.085, 8, 22), toon(c.scarf));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.085, 8, 26), toon(c.scarf));
     ring.rotation.x = Math.PI / 2;
-    ring.scale.set(1, 1, 0.75);
     scarf.add(ring);
-    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.257, 0.03, 6, 22), toon(shade(c.scarf, 1.35)));
+    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.306, 0.032, 6, 26), toon(shade(c.scarf, 1.35)));
     stripe.rotation.x = Math.PI / 2;
-    stripe.scale.set(1, 1, 0.75);
-    stripe.position.y = 0.04;
+    stripe.position.y = 0.038;
     scarf.add(stripe);
-    // a short end in front, two little tails at the back of the neck
-    [[0.2, -0.13, 0.09, -0.2, 0.22], [-0.27, -0.06, -0.05, 0.75, 0.24], [-0.25, -0.1, 0.06, 0.55, 0.2]].forEach(([x, y, z, rz, len]) => {
+    // a short end in front, two little tails hanging down the back
+    [[0.240, -0.13, 0.1, 0.2, 0.22], [-0.320, -0.12, -0.06, -0.15, 0.26], [-0.290, -0.14, 0.07, -0.05, 0.22]].forEach(([x, y, z, rz, len]) => {
       const end = new THREE.Mesh(new THREE.BoxGeometry(0.065, len, 0.12), toon(c.scarf));
       end.position.set(x, y, z);
       end.rotation.z = rz;
