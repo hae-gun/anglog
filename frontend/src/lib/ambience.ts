@@ -1,26 +1,27 @@
 // 앵파크 배경음: 파일 없이 Web Audio로 그 자리에서 만든다.
-// 바람과 개울 소리 위에, 느린 패드 화음과 오르골 같은 멜로디가 띄엄띄엄 흐른다.
+// 아주 옅은 나뭇잎 바람과 멀리 작은 새소리 위에, 밝은 패드 화음과 오르골 같은 멜로디가 띄엄띄엄 흐른다.
+// (처음 버전의 낮은 바람은 크게 부풀었다 가라앉아 파도처럼 들려서 뺐다)
 // 멜로디는 화음 안의 음과 F장조 5음 음계에서 그때그때 골라서 들을 때마다 조금씩 다르다.
 // 같은 코드로 미리 듣기 파일도 만든다(OfflineAudioContext에 renderAmbience).
 
-const BPM = 64;
+const BPM = 72;
 const BEAT = 60 / BPM;
 const BAR = BEAT * 4;
 const BARS_PER_CHORD = 2;
 
 // F장조. 음 이름 대신 MIDI 번호(60 = 가운데 도)
-// Fmaj9, Dm9, Bbmaj7, Csus2 다음 C, 다시 F. 해결감이 약한 화음으로만 돌아서 끝없이 이어져도 지루하지 않다
+// 밝은 장조 화음 위주: Fadd9, Cadd9, Bbmaj7, Fmaj7, Dm7 한 번, Bbadd9, Fadd9, Csus4
 const CHORDS: { root: number; pad: number[]; tones: number[] }[] = [
-  { root: 41, pad: [53, 57, 60, 64], tones: [65, 69, 72, 76, 79] }, // Fmaj9
-  { root: 38, pad: [50, 53, 57, 60], tones: [62, 65, 69, 72, 76] }, // Dm9
-  { root: 46, pad: [50, 53, 57, 58], tones: [62, 65, 69, 70, 74] }, // Bbmaj7
-  { root: 36, pad: [48, 50, 55, 60], tones: [67, 72, 74, 79, 62] }, // Csus2
-  { root: 41, pad: [53, 57, 60, 64], tones: [65, 69, 72, 77, 81] }, // Fmaj7 (위로)
-  { root: 45, pad: [52, 57, 60, 64], tones: [64, 69, 72, 76, 79] }, // Am7
-  { root: 46, pad: [50, 53, 57, 62], tones: [62, 65, 70, 74, 77] }, // Bbadd9
-  { root: 36, pad: [48, 52, 55, 58], tones: [64, 67, 72, 74, 79] }, // C7sus 기운
+  { root: 41, pad: [57, 60, 65, 67], tones: [72, 76, 77, 79, 81, 84] }, // Fadd9
+  { root: 36, pad: [55, 60, 62, 64], tones: [72, 74, 76, 79, 84, 86] }, // Cadd9
+  { root: 46, pad: [57, 58, 62, 65], tones: [74, 77, 81, 82, 84, 86] }, // Bbmaj7
+  { root: 41, pad: [57, 60, 64, 65], tones: [72, 76, 77, 81, 84, 88] }, // Fmaj7
+  { root: 38, pad: [57, 60, 62, 65], tones: [72, 74, 77, 81, 84, 86] }, // Dm7
+  { root: 46, pad: [58, 60, 62, 65], tones: [74, 77, 79, 82, 84, 86] }, // Bbadd9
+  { root: 41, pad: [57, 60, 65, 67], tones: [72, 76, 77, 79, 84, 88] }, // Fadd9
+  { root: 36, pad: [55, 60, 62, 65], tones: [72, 74, 77, 79, 84, 86] }, // Csus4(다시 F로 돌아가며 풀림)
 ];
-const PENTA = [65, 67, 69, 72, 74, 77, 79, 81]; // F G A C D F G A
+const PENTA = [72, 74, 77, 79, 81, 84, 86, 88]; // C D F G A C D E, 5음 음계를 한 옥타브 위로
 
 const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -140,11 +141,42 @@ function startNature(g: Graph, t0: number, rand: () => number, until: number | n
     }
     return [src, lfo];
   };
+  // 나뭇잎 사이 바람만 아주 옅게. 부풂을 작게 해서 파도처럼 들리지 않게
   return [
-    ...loop('lowpass', 520, 0.4, 0.16, 0.045, 0.7, -0.3), // 낮은 바람
-    ...loop('bandpass', 1100, 0.6, 0.1, 0.07, 0.8, 0.35), // 나뭇잎 사이로 지나가는 바람
-    ...loop('bandpass', 3200, 1.6, 0.05, 0.31, 0.5, 0.15), // 멀리 개울
+    ...loop('bandpass', 2200, 0.7, 0.035, 0.11, 0.25, 0.3),
+    ...loop('bandpass', 4200, 0.9, 0.018, 0.17, 0.25, -0.35),
   ];
+}
+
+/** A far-off little songbird: two to four quick whistles, very quiet, somewhere left or right. */
+function songbird(g: Graph, t: number, rand: () => number) {
+  const { ctx } = g;
+  const p = ctx.createStereoPanner();
+  p.pan.value = (rand() < 0.5 ? -1 : 1) * (0.4 + rand() * 0.5);
+  const lv = ctx.createGain();
+  lv.gain.value = 0.035 + rand() * 0.02;
+  p.connect(lv);
+  lv.connect(g.nature);
+  const send = ctx.createGain();
+  send.gain.value = 1.2;
+  lv.connect(send).connect(g.reverb);
+  const base = 2600 + rand() * 1400;
+  const n = 2 + Math.floor(rand() * 3);
+  for (let i = 0; i < n; i++) {
+    const at = t + i * (0.11 + rand() * 0.08);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    const up = rand() < 0.6;
+    o.frequency.setValueAtTime(base * (up ? 0.85 : 1.15), at);
+    o.frequency.exponentialRampToValueAtTime(base * (up ? 1.25 : 0.8), at + 0.07);
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(0.0001, at);
+    e.gain.linearRampToValueAtTime(1, at + 0.012);
+    e.gain.exponentialRampToValueAtTime(0.0001, at + 0.09);
+    o.connect(e).connect(p);
+    o.start(at);
+    o.stop(at + 0.1);
+  }
 }
 
 /** One plucked note, like a kalimba or a music box. */
@@ -152,15 +184,15 @@ function pluck(g: Graph, t: number, midi: number, vel: number, pan: number) {
   const { ctx } = g;
   const f = hz(midi);
   const amp = ctx.createGain();
-  const len = 2.4 + (84 - midi) * 0.03;
+  const len = 2.2 + (90 - midi) * 0.03;
   amp.gain.setValueAtTime(0.0001, t);
   amp.gain.linearRampToValueAtTime(vel, t + 0.008);
   amp.gain.exponentialRampToValueAtTime(vel * 0.35, t + 0.25);
   amp.gain.exponentialRampToValueAtTime(0.0001, t + len);
   const tone = ctx.createBiquadFilter();
   tone.type = 'lowpass';
-  tone.frequency.setValueAtTime(5200, t);
-  tone.frequency.exponentialRampToValueAtTime(1600, t + 0.6);
+  tone.frequency.setValueAtTime(7000, t);
+  tone.frequency.exponentialRampToValueAtTime(2600, t + 0.6);
   const p = ctx.createStereoPanner();
   p.pan.value = pan;
   amp.connect(tone).connect(p);
@@ -169,7 +201,7 @@ function pluck(g: Graph, t: number, midi: number, vel: number, pan: number) {
   send.gain.value = 0.9;
   p.connect(send).connect(g.reverb);
   // 기음, 옥타브, 칼림바 특유의 살짝 어긋난 배음
-  ([[1, 1], [2, 0.22], [4.07, 0.06], [5.9, 0.025]] as const).forEach(([mul, lv]) => {
+  ([[1, 1], [2, 0.3], [3, 0.06], [4.07, 0.08]] as const).forEach(([mul, lv]) => {
     const o = ctx.createOscillator();
     o.type = 'sine';
     o.frequency.value = f * mul;
@@ -193,9 +225,9 @@ function pad(g: Graph, t: number, notes: number[], dur: number, level: number) {
   amp.gain.linearRampToValueAtTime(0.0001, t + dur + 2.5);
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.setValueAtTime(700, t);
-  lp.frequency.linearRampToValueAtTime(1100, t + dur * 0.6);
-  lp.frequency.linearRampToValueAtTime(650, t + dur + 2);
+  lp.frequency.setValueAtTime(1300, t);
+  lp.frequency.linearRampToValueAtTime(2100, t + dur * 0.6);
+  lp.frequency.linearRampToValueAtTime(1200, t + dur + 2);
   lp.Q.value = 0.3;
   amp.connect(lp);
   lp.connect(g.music);
@@ -241,7 +273,8 @@ function bass(g: Graph, t: number, midi: number, level: number) {
 function composer(g: Graph, t0: number, rand: () => number) {
   let bar = 0;
   let next = t0;
-  let lastNote = 72;
+  let lastNote = 79;
+  let nextBird = t0 + 4 + rand() * 6;
   // 몇 마디는 멜로디를 쉬고 화음만 둔다(숨 쉬는 자리)
   let restUntil = 2;
 
@@ -258,8 +291,10 @@ function composer(g: Graph, t0: number, rand: () => number) {
       const swing = onBeat ? 0 : BEAT * 0.08;
       const at = t + step * (BEAT / 2) + swing + (rand() - 0.5) * 0.02;
       pluck(g, at, m, 0.42 + rand() * 0.16, (rand() - 0.5) * 0.7);
-      // 가끔 아래 3도나 5도로 살짝 겹친다
+      // 가끔 아래 4도나 5도로 살짝 겹친다
       if (rand() < 0.12) pluck(g, at + 0.03, m - (rand() < 0.5 ? 5 : 7), 0.16, (rand() - 0.5) * 0.7);
+      // 아주 가끔 한 옥타브 위에서 반짝
+      if (rand() < 0.05) pluck(g, at + BEAT, m + 12, 0.12, (rand() - 0.5) * 0.9);
     }
   };
 
@@ -269,14 +304,19 @@ function composer(g: Graph, t0: number, rand: () => number) {
         const chordIndex = Math.floor(bar / BARS_PER_CHORD) % CHORDS.length;
         const chord = CHORDS[chordIndex];
         if (bar % BARS_PER_CHORD === 0) {
-          pad(g, next, chord.pad, BAR * BARS_PER_CHORD, 0.24);
-          bass(g, next, chord.root + 12, 0.07);
+          pad(g, next, chord.pad, BAR * BARS_PER_CHORD, 0.2);
+          bass(g, next, chord.root + 12, 0.05);
         }
         // 한 바퀴(16마디)마다 멜로디 밀도가 천천히 오르내린다
-        const busy = 0.55 + 0.45 * Math.sin((bar / 16) * Math.PI);
+        const busy = 0.7 + 0.3 * Math.sin((bar / 16) * Math.PI);
         if (bar >= restUntil) {
           melodyBar(next, chord, busy);
           if (bar % 16 === 15 && rand() < 0.6) restUntil = bar + 1 + Math.floor(rand() * 3);
+        }
+        // 멀리 작은 새가 가끔
+        while (nextBird < next + BAR) {
+          songbird(g, nextBird, rand);
+          nextBird += 7 + rand() * 12;
         }
         bar++;
         next += BAR;
