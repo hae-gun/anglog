@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { playCall, playFx } from '../lib/sound';
 import { makeBird, toLinear } from './bird.js';
 import { disposeScene, mat, rod, skyNow } from './scene.js';
+import { buildPepero, peperoOpen } from './pepero.js';
 import { tr } from '../i18n';
 
 /** Lines in both languages: L(['안녕'], ['Hi']). pick() takes the current language's list. */
@@ -22,7 +23,7 @@ const MAX_REMOTES_DRAWN = 24;
 const CRUISE = 3.0;
 const CRUISE_MIN = 0.8;
 const CRUISE_MAX = 11.5;
-const WORLD_R = 56; // how far you can fly (the realtime server takes up to 60)
+const WORLD_R = 56; // how far you can fly (the realtime server takes up to 110: the 빼빼로 숲 is further north)
 const WALK_SPEED = 3.2;
 const FLY_SPEED = 6.2;
 const clamp = THREE.MathUtils.clamp;
@@ -97,9 +98,10 @@ const SLOT_ANGLES = (() => {
  * @param {HTMLElement} container
  * @param {any[]} cards
  * @param {{ visitor: any, startAt?: string | null, onEnter?: (h: string) => void, onBirdTap?: (who: any) => void, onEmptyLot?: () => void,
- *   onPrank?: (pid: number, k: number) => void, onPranked?: (who: any) => void, onAnswered?: (who: any) => void }} opts
+ *   onPrank?: (pid: number, k: number) => void, onPranked?: (who: any) => void, onAnswered?: (who: any) => void,
+ *   onZone?: (zone: 'park' | 'pepero') => void }} opts
  */
-export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot, onPrank, onPranked, onAnswered } = /** @type {any} */ ({})) {
+export function mountPark(container, cards, { visitor, startAt = null, onEnter, onBirdTap, onEmptyLot, onPrank, onPranked, onAnswered, onZone } = /** @type {any} */ ({})) {
   const env = skyNow();
   const small = Math.min(window.innerWidth, window.innerHeight) < 720;
   // ?night=1 and ?weather=rain|snow|clear try out the other looks (for checking, and for fun)
@@ -107,6 +109,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   if (q.get('night') === '1') Object.assign(env, { sky: '#1B2547', light: 0.45, night: true, clear: '#1B2036' });
   const weather = ['rain', 'snow', 'clear'].includes(q.get('weather') || '') ? q.get('weather') : todayWeather();
   const wet = weather === 'rain', snowy = weather === 'snow';
+  const pepOpen = peperoOpen(); // the 빼빼로 숲 event space up north (see pepero.js)
   // sky: a gradient dome from a warm autumn horizon to the top, by the time of day in Korea
   const SKY = env.night ? ['#0B1230', '#2B355E']
     : env.sky === '#F4A97A' ? ['#6A73B0', '#F6B183']
@@ -235,6 +238,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       const hill = new THREE.Mesh(new THREE.IcosahedronGeometry(R, 1), mat(tint(pick(HILLS), env.night ? '#1B2036' : SKY[1], row ? 0.45 : 0.25)));
       hill.scale.y = 0.32 + rnd() * 0.2;
       hill.position.set(Math.cos(a) * r, -R * 0.08, Math.sin(a) * r);
+      if (pepOpen && !row && angDiff(a, Math.PI / 2) < 0.45) continue; // the 빼빼로 숲 is there
       scene.add(hill);
     }
   }
@@ -956,6 +960,14 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     scene.add(baseMesh);
   }
 
+  // ---- 빼빼로 숲 (event only): its own seed, so the park's layout stays the same with or without it ----
+  const pep = pepOpen ? buildPepero(scene, { rnd: mulberry(1111), perchSegs, obstacles, parkR: PARK_R, snowy, night: !!env.night, small, tint, snow: SNOW }) : null;
+  if (pep) {
+    pep.lands.forEach((l) => zoneLands.push(l));
+    // now and then a resident flies over for a look
+    zoneSpots.push(() => (Math.random() < 0.3 ? pep.spot() : null));
+  }
+
   // ---- fallen leaves and leaf piles -------------------------------------------------------
   const leafGeo = new THREE.PlaneGeometry(0.2, 0.12);
   leafGeo.rotateX(-Math.PI / 2);
@@ -1118,6 +1130,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   function walkable(x, z) {
     if (x * x + z * z < (PARK_R - 0.8) ** 2) return true;
     if (nearTrail(x, z).d < TRAIL_HALF) return true;
+    if (pep && pep.walkable(x, z)) return true;
     return BEACHES.some((b) => Math.hypot(x - b.x, z - b.z) < b.r && z > deepLine(x));
   }
   /** The nearest place you can stand. */
@@ -1128,6 +1141,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     cands.push([(x * (PARK_R - 0.85)) / d, (z * (PARK_R - 0.85)) / d]);
     const t = nearTrail(x, z);
     if (t.d > 0) { const k = (TRAIL_HALF - 0.05) / t.d; cands.push([t.q.x + (x - t.q.x) * k, t.q.z + (z - t.q.z) * k]); }
+    if (pep) cands.push(...pep.nearest(x, z));
     BEACHES.forEach((b) => {
       const bd = Math.hypot(x - b.x, z - b.z);
       let px = x, pz = z;
@@ -1241,6 +1255,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
 
   // ---- actors --------------------------------------------------------------------------------
   let clock = 0;
+  let zoneNow = 'park';
   const actors = [];
   function actor(b, name, opts) {
     const a = {
@@ -1772,7 +1787,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       player.surface = 'ground';
     } else {
       x = clamp(x, -WORLD_R, WORLD_R);
-      z = clamp(z, -WORLD_R, WORLD_R);
+      z = clamp(z, -WORLD_R, pep ? pep.flyLimit : WORLD_R);
       const q = airPush(x, z, player.pos.y);
       x = q.x;
       z = q.z;
@@ -2331,6 +2346,11 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     clock += dt;
+    if (pep && pep.zoneOf(player.pos) !== zoneNow) {
+      zoneNow = pep.zoneOf(player.pos);
+      if (onZone) onZone(zoneNow);
+      if (zoneNow === 'pepero') say(player, pick(L(['빼빼로 숲이다!', '냄새만 맡을게', '초콜릿은 먹으면 안 돼!'], ['The Pepero Forest!', 'Just a sniff', 'No chocolate for me!'])), 1.8);
+    }
 
     const riders = swingRiders();
     swingAmp += ((riders.length ? 0.35 : 0.08) - swingAmp) * (1 - Math.exp(-dt * 0.8));
@@ -2759,6 +2779,25 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       const a = remotes.get(pid);
       if (a) a.remote.calm = !!on;
     },
+    /** Whether the 빼빼로 숲 is open today, and which side my bird is on now. */
+    pepero: !!pep,
+    zone: () => zoneNow,
+    /** One flight between the park and the 빼빼로 숲, high over the road. Returns where it is going. */
+    travel() {
+      if (!pep || entering || gone) return null;
+      const to = zoneNow === 'pepero' ? 'park' : 'pepero';
+      const at0 = to === 'pepero' ? pep.arrival : pep.home;
+      const dest = groundPoint(at0.x + (Math.random() - 0.5) * 2, at0.z + (Math.random() - 0.5) * 2);
+      const from = player.pos.clone();
+      flying = false;
+      landing = false;
+      player.action = null;
+      player.move = { type: 'fly', from, to: dest, t0: clock, dur: 1.2 + from.distanceTo(dest) / 12, peak: Math.max(from.y, dest.y) + 8, surface: 'ground', after: () => heartsAt(player, 3) };
+      player.rotTarget = angleTo(from, dest);
+      say(player, to === 'pepero' ? tr('빼빼로 숲으로!', 'Off to the forest!') : tr('공원으로!', 'Back to the park!'), 1.4);
+      playCall('chirp', 1.1, 0.8);
+      return to;
+    },
     /** Fly to a house and go in. False when that house is not in this park. */
     enter(handle) {
       const hh = houses.find((x) => x.handle === handle);
@@ -2846,7 +2885,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     placeAt(spot) {
       if (startAt || !spot || gone) return false;
       const lim = PARK_R + 30;
-      const x = clamp(spot.x, -lim, lim), z = clamp(spot.z, -lim, lim);
+      const x = clamp(spot.x, -lim, lim), z = clamp(spot.z, -lim, pep ? pep.flyLimit : lim);
       const below = surfaceBelow(x, z, (spot.y || 0) + 0.3);
       player.move = null;
       flying = false;

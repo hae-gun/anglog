@@ -24,6 +24,9 @@ interface Controller {
   chirp(): void;
   snack(): 'ok' | 'wait' | 'busy';
   weather: 'rain' | 'snow' | 'clear';
+  /** The 빼빼로 숲 event space is open today. */
+  pepero: boolean;
+  travel(): 'park' | 'pepero' | null;
   say(text: string): void;
   playTogether(): string | null;
   enter(handle: string): boolean;
@@ -132,6 +135,7 @@ export function ParkPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
   const [flying, setFlying] = useState(false);
+  const [zone, setZone] = useState<null | 'park' | 'pepero'>(null); // null: no 빼빼로 숲 today
   const [status, setStatus] = useState<NetStatus | null>(null);
   // bumped by "여기서 다시 놀기" after another tab or device took my bird
   const [netRound, setNetRound] = useState(0);
@@ -185,6 +189,7 @@ export function ParkPage() {
         startAt: startAt.current,
         onEnter: (handle: string) => navigate(`/play/${handle}`),
         onBirdTap: (who: BirdPop) => setBird(who),
+        onZone: (z: 'park' | 'pepero') => setZone(z),
         onPrank: (pid: number, k: number) => net.current?.prank(pid, k),
         onPranked: (who: Pranked) => {
           if (who.back) countTudak(who.name);
@@ -201,6 +206,7 @@ export function ParkPage() {
               : tr('앵로그에 우리 앵무를 등록하면 여기에 집이 생겨요.', 'Add your parrot on Anglog and your house goes up here.')),
       }) as unknown as Controller;
       ctl.current = c;
+      setZone(c.pepero ? 'park' : null);
       mountedKey.current = visitorKey;
       if (viewRef.current === 'first') c.setView('first');
       others.current.forEach((p) => { c.addRemote(p.pid, p.look, p); });
@@ -413,6 +419,11 @@ export function ParkPage() {
         )}
         {tudak && <span className="play-chip park-tudak" title={tr('오늘 가장 많이 투닥거린 앵무', 'The bird you squabbled with most today')}>{tr(`투닥 친구 ${tudak.name} ${tudak.n}번`, `Rival ${tudak.name} x${tudak.n}`)}</span>}
         <span className="grow" />
+        {zone && (
+          <button className="play-chip park-pepero" onClick={() => ctl.current?.travel()}>
+            {zone === 'pepero' ? tr('공원으로 돌아가기', 'Back to the park') : tr('빼빼로 숲 가기', 'Pepero Forest')}
+          </button>
+        )}
         {parrots.length > 1 && (
           <button className="play-chip park-me" onClick={() => setSheet('birds')} aria-label={tr(`앵무 바꾸기, 지금은 ${visitor.name}`, `Switch bird, now ${visitor.name}`)}>
             <span className="dot" style={{ background: visitor.colors.body }} aria-hidden="true" />{visitor.name}

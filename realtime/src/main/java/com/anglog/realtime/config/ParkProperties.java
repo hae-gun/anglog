@@ -22,7 +22,7 @@ public record ParkProperties(
         @DefaultValue("600") long emoteMinGapMs,
         @DefaultValue("12") int phraseCount,
         @DefaultValue("") String blockedWordsFile,
-        @DefaultValue("60") double worldLimit,
+        @DefaultValue("110") double worldLimit, // the 빼빼로 숲 reaches z 111 (frontend room3d/pepero.js)
         @DefaultValue("12") double heightLimit,
         // pranks: how close, how often, how long an answer may wait, and how a target says "enough"
         @DefaultValue("3.2") double prankRange,
