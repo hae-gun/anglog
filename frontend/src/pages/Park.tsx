@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api, RoomCard } from '../api';
+import { api, RoomCard, speciesName } from '../api';
 import { BirdAvatar } from '../components/BirdAvatar';
 import { Joystick } from '../components/Joystick';
 import { ParrotForm } from '../components/ParrotForm';
 import { GuestBird, loadGuestBird, saveGuestBird } from '../lib/guestBird';
 import { timeAgo } from '../lib/image';
 import { connectPark, NetClient, NetLook, NetPlayer, NetSpot, NetState, NetStatus, PrankNo, realtimeUrl } from '../lib/parkNet';
-import { PHRASES } from '../lib/phrases';
+import { PHRASES, phraseText } from '../lib/phrases';
+import { LangSwitch } from '../components/LangSwitch';
 import { isMuted, setMuted } from '../lib/sound';
 import { mountPark } from '../room3d/park.js';
 import { useSession } from '../session';
+import { isEn, tr } from '../i18n';
 
 interface Controller {
   setInput(x: number, y: number): void;
@@ -59,21 +61,22 @@ const ANSWER_MS = 8000;
 
 // what each prank is called on the button, and how it reads when it happens to me
 const PRANKS = [
-  { label: '콕 찌르기', did: '콕 찔렀어요' },
-  { label: '밀치기', did: '밀쳤어요' },
-  { label: '간식 뺏기', did: '간식을 뺏어 먹었어요' },
-  { label: '머리 위에 올라타기', did: '머리 위에 올라탔어요' },
-  { label: '다듬는 척 콕', did: '깃털을 다듬어 주는 척하다 콕 찔렀어요' },
+  { get label() { return tr('콕 찌르기', 'Poke'); }, get did() { return tr('콕 찔렀어요', 'poked you'); } },
+  { get label() { return tr('밀치기', 'Shove'); }, get did() { return tr('밀쳤어요', 'shoved you'); } },
+  { get label() { return tr('간식 뺏기', 'Steal a snack'); }, get did() { return tr('간식을 뺏어 먹었어요', 'stole your snack'); } },
+  { get label() { return tr('머리 위에 올라타기', 'Sit on their head'); }, get did() { return tr('머리 위에 올라탔어요', 'sat on your head'); } },
+  { get label() { return tr('다듬는 척 콕', 'Fake preen, then poke'); }, get did() { return tr('깃털을 다듬어 주는 척하다 콕 찔렀어요', 'pretended to preen you, then poked'); } },
 ];
 const PRANK_NO: Record<PrankNo, string> = {
-  calm: '지금은 장난 받지 않는 앵무예요.',
-  far: '조금 더 가까이 가야 장난칠 수 있어요.',
-  wait: '조금 있다가 다시 장난쳐요.',
-  blocked: '계속 무시당해서 그 앵무한테는 잠깐 장난을 못 쳐요.',
-  gone: '그 앵무는 벌써 떠났어요.',
+  get calm() { return tr('지금은 장난 받지 않는 앵무예요.', 'That bird is not up for pranks right now.'); },
+  get far() { return tr('조금 더 가까이 가야 장난칠 수 있어요.', 'Get a little closer to prank.'); },
+  get wait() { return tr('조금 있다가 다시 장난쳐요.', 'Wait a bit before the next prank.'); },
+  get blocked() { return tr('계속 무시당해서 그 앵무한테는 잠깐 장난을 못 쳐요.', 'You were ignored too many times. No pranks on that bird for a while.'); },
+  get gone() { return tr('그 앵무는 벌써 떠났어요.', 'That bird already left.'); },
 };
 /** 이/가 after a Korean name: by whether its last syllable ends in a consonant. */
 function iGa(name: string) {
+  if (isEn()) return name;
   const c = name.charCodeAt(name.length - 1);
   if (c < 0xac00 || c > 0xd7a3) return `${name}${/[a-zA-Z]$/.test(name) ? '가' : '(이)가'}`;
   return `${name}${(c - 0xac00) % 28 ? '이' : '가'}`;
@@ -158,7 +161,7 @@ export function ParkPage() {
         // the park still opens without the diary API: empty lots, AI-less, but playable
         if (!alive) return;
         setRooms([]);
-        setError('이웃집을 불러오지 못했어요. 공원에서는 그대로 놀 수 있어요.');
+        setError(tr('이웃집을 불러오지 못했어요. 공원에서는 그대로 놀 수 있어요.', 'Could not load the houses. You can still play in the park.'));
       });
     return () => { alive = false; };
   }, [me?.id]);
@@ -190,12 +193,12 @@ export function ParkPage() {
           setPranked(who);
         },
         onAnswered: (who: Who & { answer: number }) => {
-          setToast(who.answer === 1 ? `${iGa(who.name)} 화해했어요.` : `${iGa(who.name)} 흥 하고 날아갔어요.`);
+          setToast(who.answer === 1 ? tr(`${iGa(who.name)} 화해했어요.`, `${who.name} made up with you.`) : tr(`${iGa(who.name)} 흥 하고 날아갔어요.`, `${who.name} huffed and flew off.`));
         },
         onEmptyLot: () => setToast(
-          me && parrots.length ? '새 이웃을 기다리는 빈 터예요.'
-            : me ? '내 앵무를 등록하면 여기에 우리 집이 생겨요.'
-              : '앵로그에 우리 앵무를 등록하면 여기에 집이 생겨요.'),
+          me && parrots.length ? tr('새 이웃을 기다리는 빈 터예요.', 'An empty lot waiting for a new neighbour.')
+            : me ? tr('내 앵무를 등록하면 여기에 우리 집이 생겨요.', 'Add your parrot and your house goes up here.')
+              : tr('앵로그에 우리 앵무를 등록하면 여기에 집이 생겨요.', 'Add your parrot on Anglog and your house goes up here.')),
       }) as unknown as Controller;
       ctl.current = c;
       mountedKey.current = visitorKey;
@@ -272,8 +275,8 @@ export function ParkPage() {
         if (p) p.calm = on;
         ctl.current?.calmRemote(pid, on);
       },
-      prankNo: (_to, why) => setToast(PRANK_NO[why] ?? '지금은 장난칠 수 없어요.'),
-      say: (pid, n) => { if (PHRASES[n]) ctl.current?.sayRemote(pid, PHRASES[n]); },
+      prankNo: (_to, why) => setToast(PRANK_NO[why] ?? tr('지금은 장난칠 수 없어요.', 'No pranks right now.')),
+      say: (pid, n) => { if (phraseText(n)) ctl.current?.sayRemote(pid, phraseText(n)!); },
       online: setOnline,
     }, calmRef.current, async () => {
       // a logged-in owner: one bird per account in the park, back where it last was
@@ -329,7 +332,7 @@ export function ParkPage() {
   function countTudak(name: string) {
     const n = bumpTudak(name);
     setTudak(topTudak());
-    if (n > 1) setToast(`오늘 ${name}랑 ${n}번째 투닥투닥!`);
+    if (n > 1) setToast(tr(`오늘 ${name}랑 ${n}번째 투닥투닥!`, `Squabble no. ${n} with ${name} today!`));
   }
   function answerPrank(a: number) {
     if (!pranked) return;
@@ -343,7 +346,7 @@ export function ParkPage() {
     setSheet(null);
     const r = ctl.current?.prank(k);
     if (!r) return;
-    if (!r.ok) setToast(r.why === 'calm' ? `${r.name}는 지금 장난 받지 않아요.` : '근처에 장난칠 앵무가 없어요. 다른 앵무 곁으로 가 봐요.');
+    if (!r.ok) setToast(r.why === 'calm' ? tr(`${r.name}는 지금 장난 받지 않아요.`, `${r.name} is not up for pranks right now.`) : tr('근처에 장난칠 앵무가 없어요. 다른 앵무 곁으로 가 봐요.', 'No bird nearby to prank. Go up to one first.'));
   }
   function toggleCalm() {
     const next = !calm;
@@ -355,7 +358,7 @@ export function ParkPage() {
 
   async function surf() {
     const next = await api.randomRoom(null);
-    if (!next) return setToast('아직 놀러갈 집이 없어요.');
+    if (!next) return setToast(tr('아직 놀러갈 집이 없어요.', 'No houses to visit yet.'));
     if (!ctl.current?.enter(next)) navigate(`/play/${next}`);
   }
   function visit(handle: string) {
@@ -376,20 +379,20 @@ export function ParkPage() {
   }
   // the rest of the buttons live in one sheet, so the park stays in view
   const more: { label: string; run: () => void }[] = [
-    { label: '말하기', run: () => setSheet('say') },
-    { label: '같이 놀기', run: () => {
+    { get label() { return tr('말하기', 'Say'); }, run: () => setSheet('say') },
+    { get label() { return tr('같이 놀기', 'Play together'); }, run: () => {
       setSheet(null);
-      if (ctl.current?.playTogether() == null) setToast('근처에 같이 놀 앵무가 없어요.');
+      if (ctl.current?.playTogether() == null) setToast(tr('근처에 같이 놀 앵무가 없어요.', 'No bird nearby to play with.'));
       else net.current?.emote('dance');
     } },
-    { label: '간식', run: () => { setSheet(null); if (ctl.current?.snack() === 'wait') setToast('방금 줬어요. 다 먹고 나면 또 줘요.'); } },
+    { get label() { return tr('간식', 'Snack'); }, run: () => { setSheet(null); if (ctl.current?.snack() === 'wait') setToast(tr('방금 줬어요. 다 먹고 나면 또 줘요.', 'You just threw some. Wait until they finish.')); } },
     myBird && me
-      ? { label: '내 집', run: () => { setSheet(null); if (!ctl.current?.enter(me.handle)) navigate(`/play/${me.handle}`); } }
-      : { label: '꾸미기', run: () => setSheet('dress') },
-    { label: '아무 집', run: () => { setSheet(null); surf(); } },
-    { label: '집 목록', run: () => setSheet('list') },
-    { label: view === 'first' ? '3인칭으로' : '1인칭으로', run: () => { setSheet(null); toggleView(); } },
-    { label: muted ? '소리 켜기' : '소리 끄기', run: () => { setMuted(!muted); setMute(!muted); } },
+      ? { get label() { return tr('내 집', 'My house'); }, run: () => { setSheet(null); if (!ctl.current?.enter(me.handle)) navigate(`/play/${me.handle}`); } }
+      : { get label() { return tr('꾸미기', 'Dress up'); }, run: () => setSheet('dress') },
+    { get label() { return tr('아무 집', 'Random house'); }, run: () => { setSheet(null); surf(); } },
+    { get label() { return tr('집 목록', 'Houses'); }, run: () => setSheet('list') },
+    { label: view === 'first' ? tr('3인칭으로', 'Third person') : tr('1인칭으로', 'First person'), run: () => { setSheet(null); toggleView(); } },
+    { label: muted ? tr('소리 켜기', 'Sound on') : tr('소리 끄기', 'Sound off'), run: () => { setMuted(!muted); setMute(!muted); } },
   ];
 
   const followed = rooms?.filter((r) => r.following) ?? [];
@@ -397,87 +400,88 @@ export function ParkPage() {
 
   return (
     <div className="park">
-      <div className="park-stage" ref={stage} aria-label="앵파크. 조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 카메라가 돌아가요. 집 문을 누르면 그 집에 들어가요." />
+      <div className="park-stage" ref={stage} aria-label={tr('앵파크. 조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 카메라가 돌아가요. 집 문을 누르면 그 집에 들어가요.', 'Parrot Park. Walk with the stick or by tapping the ground, drag to turn the camera, tap a door to go in.')} />
 
       <div className="park-top">
-        <Link to="/feed" className="play-chip park-brand"><span aria-hidden="true">←</span> 앵로그</Link>
+        <Link to="/feed" className="play-chip park-brand"><span aria-hidden="true">←</span> {tr('앵로그', 'Anglog')}</Link>
+        <LangSwitch className="play-chip" />
         {status && (
           <span className={`play-chip park-online ${status}`} role="status">
             <span className="dot" aria-hidden="true" />
-            {status === 'online' ? `${online}마리 노는 중` : status === 'connecting' ? '연결 중' : status === 'replaced' ? '다른 곳에서 노는 중' : '혼자 노는 중'}
+            {status === 'online' ? tr(`${online}마리 노는 중`, `${online} playing`) : status === 'connecting' ? tr('연결 중', 'Connecting') : status === 'replaced' ? tr('다른 곳에서 노는 중', 'Playing elsewhere') : tr('혼자 노는 중', 'Playing solo')}
           </span>
         )}
-        {tudak && <span className="play-chip park-tudak" title="오늘 가장 많이 투닥거린 앵무">투닥 친구 {tudak.name} {tudak.n}번</span>}
+        {tudak && <span className="play-chip park-tudak" title={tr('오늘 가장 많이 투닥거린 앵무', 'The bird you squabbled with most today')}>{tr(`투닥 친구 ${tudak.name} ${tudak.n}번`, `Rival ${tudak.name} x${tudak.n}`)}</span>}
         <span className="grow" />
         {parrots.length > 1 && (
-          <button className="play-chip park-me" onClick={() => setSheet('birds')} aria-label={`앵무 바꾸기, 지금은 ${visitor.name}`}>
+          <button className="play-chip park-me" onClick={() => setSheet('birds')} aria-label={tr(`앵무 바꾸기, 지금은 ${visitor.name}`, `Switch bird, now ${visitor.name}`)}>
             <span className="dot" style={{ background: visitor.colors.body }} aria-hidden="true" />{visitor.name}
           </button>
         )}
       </div>
 
       {error && hint && <p className="play-note park-note" role="alert">{error}</p>}
-      {broken && <p className="play-note park-note">이 기기에서는 3D 앵파크를 열 수 없어요. 집 목록으로 놀러가 주세요.</p>}
-      {!rooms && !error && <p className="park-hint">앵파크 문 여는 중</p>}
+      {broken && <p className="play-note park-note">{tr('이 기기에서는 3D 앵파크를 열 수 없어요. 집 목록으로 놀러가 주세요.', 'This device cannot open the 3D park. Visit houses from the list instead.')}</p>}
+      {!rooms && !error && <p className="park-hint">{tr('앵파크 문 여는 중', 'Opening the park')}</p>}
       {rooms && hint && !broken && !bird && (
-        <p className="park-hint">조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 둘러봐요. 날기로 날아올라 위로, 아래로 높이를 바꾸고, 집 문을 누르면 들어가요. 짹짹을 박자 맞춰 세 번 넘게 누르면 근처 앵무들이 따라 불러요.</p>
+        <p className="park-hint">{tr('조이스틱이나 바닥을 눌러 걷고, 화면을 끌면 둘러봐요. 날기로 날아올라 위로, 아래로 높이를 바꾸고, 집 문을 누르면 들어가요. 짹짹을 박자 맞춰 세 번 넘게 누르면 근처 앵무들이 따라 불러요.', 'Walk with the stick or by tapping the ground, drag to look around. Fly, then go up or down, and tap a door to go in. Chirp three or more times in a rhythm and the birds nearby sing along.')}</p>
       )}
 
       {bird && (
         <div className="park-pop" role="status">
           <div>
             <b>{bird.birdName}</b>
-            <span>{bird.remote ? (bird.handle ? '지금 같이 노는 앵무예요' : '지금 같이 노는 손님 앵무예요') : `${bird.nickname}의 집에 살아요`}</span>
+            <span>{bird.remote ? (bird.handle ? tr('지금 같이 노는 앵무예요', 'Playing here right now') : tr('지금 같이 노는 손님 앵무예요', 'A guest bird playing here right now')) : tr(`${bird.nickname}의 집에 살아요`, `Lives at ${bird.nickname}'s house`)}</span>
           </div>
-          {bird.handle && <button className="btn small primary" onClick={() => visit(bird.handle!)}>집에 놀러가기</button>}
-          {bird.handle && <Link className="btn small" to={`/room/${bird.handle}`}>일기</Link>}
+          {bird.handle && <button className="btn small primary" onClick={() => visit(bird.handle!)}>{tr('집에 놀러가기', 'Visit house')}</button>}
+          {bird.handle && <Link className="btn small" to={`/room/${bird.handle}`}>{tr('일기', 'Diary')}</Link>}
         </div>
       )}
 
       {pranked && (
-        <div className="park-prank" role="alertdialog" aria-label="장난에 답하기">
-          <p><b>{iGa(pranked.name)}</b> {pranked.back ? '되받아쳤어요!' : `${PRANKS[pranked.kind]?.did ?? '장난쳤어요'}!`}</p>
+        <div className="park-prank" role="alertdialog" aria-label={tr('장난에 답하기', 'Answer the prank')}>
+          <p><b>{iGa(pranked.name)}</b> {pranked.back ? tr('되받아쳤어요!', 'got you back!') : `${PRANKS[pranked.kind]?.did ?? tr('장난쳤어요', 'pranked you')}!`}</p>
           <div className="row">
-            <button className="btn small primary" onClick={() => answerPrank(0)}>되받아치기</button>
-            <button className="btn small" onClick={() => answerPrank(1)}>화해하기</button>
-            <button className="btn small ghost" onClick={() => answerPrank(2)}>무시하고 날아가기</button>
+            <button className="btn small primary" onClick={() => answerPrank(0)}>{tr('되받아치기', 'Get them back')}</button>
+            <button className="btn small" onClick={() => answerPrank(1)}>{tr('화해하기', 'Make up')}</button>
+            <button className="btn small ghost" onClick={() => answerPrank(2)}>{tr('무시하고 날아가기', 'Ignore and fly off')}</button>
           </div>
           <span className="park-prank-timer" style={{ animationDuration: `${ANSWER_MS}ms` }} key={`${pranked.id}-${pranked.kind}-${pranked.back}`} aria-hidden="true" />
         </div>
       )}
 
       {status === 'replaced' && (
-        <div className="park-invite" role="dialog" aria-label="다른 곳에서 앵파크에 들어왔어요">
-          <b>다른 곳에서 앵파크에 들어왔어요</b>
-          <p>같은 계정의 앵무는 공원에 한 마리만 있을 수 있어서, 여기 있던 앵무는 그쪽으로 옮겨 갔어요. 여기서 다시 놀면 그 자리에서 이어서 나와요.</p>
+        <div className="park-invite" role="dialog" aria-label={tr('다른 곳에서 앵파크에 들어왔어요', 'You joined the park somewhere else')}>
+          <b>{tr('다른 곳에서 앵파크에 들어왔어요', 'You joined the park somewhere else')}</b>
+          <p>{tr('같은 계정의 앵무는 공원에 한 마리만 있을 수 있어서, 여기 있던 앵무는 그쪽으로 옮겨 갔어요. 여기서 다시 놀면 그 자리에서 이어서 나와요.', 'One account can have one bird in the park, so your bird moved over there. Play here again and it comes back right where it was.')}</p>
           <div className="row">
-            <button className="btn small primary" onClick={() => setNetRound((n) => n + 1)}>여기서 다시 놀기</button>
-            <Link className="btn small" to="/feed">앵로그로 가기</Link>
+            <button className="btn small primary" onClick={() => setNetRound((n) => n + 1)}>{tr('여기서 다시 놀기', 'Play here again')}</button>
+            <Link className="btn small" to="/feed">{tr('앵로그로 가기', 'Go to Anglog')}</Link>
           </div>
         </div>
       )}
 
       {status === 'kicked' && (
-        <div className="park-invite" role="dialog" aria-label="공원에서 나오게 됐어요">
-          <b>공원에서 잠시 나오게 됐어요</b>
-          <p>운영자가 이 앵무를 공원에서 내보냈어요. 지금은 혼자 노는 공원이에요. 이름이나 행동이 다른 집사를 불편하게 했다면 다음에는 조심해 주세요.</p>
+        <div className="park-invite" role="dialog" aria-label={tr('공원에서 나오게 됐어요', 'You were taken out of the park')}>
+          <b>{tr('공원에서 잠시 나오게 됐어요', 'You were taken out of the park for now')}</b>
+          <p>{tr('운영자가 이 앵무를 공원에서 내보냈어요. 지금은 혼자 노는 공원이에요. 이름이나 행동이 다른 집사를 불편하게 했다면 다음에는 조심해 주세요.', 'The team took this bird out of the park. You are playing solo for now. If a name or behaviour bothered others, please be careful next time.')}</p>
         </div>
       )}
 
       {invite && (
-        <div className="park-invite" role="dialog" aria-label="앵로그 안내">
-          <b>혹시 앵집사님이세요?</b>
-          <p>우리 앵무를 앵로그에 등록하면 앵파크에 우리 집이 생기고, 일기를 쓸수록 집이 꾸며져요. 지금 꾸민 모습도 그대로 가져가요.</p>
+        <div className="park-invite" role="dialog" aria-label={tr('앵로그 안내', 'About Anglog')}>
+          <b>{tr('혹시 앵집사님이세요?', 'Do you have a parrot?')}</b>
+          <p>{tr('우리 앵무를 앵로그에 등록하면 앵파크에 우리 집이 생기고, 일기를 쓸수록 집이 꾸며져요. 지금 꾸민 모습도 그대로 가져가요.', 'Add your parrot on Anglog and you get a house in the park that fills up as you write diaries. The look you made comes with you.')}</p>
           <div className="row">
-            <Link className="btn small primary" to={joinHref}>앵로그 시작하기</Link>
-            <button className="btn small" onClick={() => setInvite(false)}>계속 놀기</button>
+            <Link className="btn small primary" to={joinHref}>{tr('앵로그 시작하기', 'Start Anglog')}</Link>
+            <button className="btn small" onClick={() => setInvite(false)}>{tr('계속 놀기', 'Keep playing')}</button>
           </div>
         </div>
       )}
 
       {flying && (
-        <div className="park-climb" role="group" aria-label="높이">
-          {[[1, '위로'], [-1, '아래로']].map(([dir, label]) => (
+        <div className="park-climb" role="group" aria-label={tr('높이', 'Height')}>
+          {[[1, tr('위로', 'Up')], [-1, tr('아래로', 'Down')]].map(([dir, label]) => (
             <button key={label} className="pbtn"
               onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); ctl.current?.setClimb(dir as number); }}
               onPointerUp={() => ctl.current?.setClimb(0)}
@@ -489,30 +493,30 @@ export function ParkPage() {
 
       <div className="park-controls">
         <Joystick onChange={(x, y) => ctl.current?.setInput(x, y)} />
-        <div className="park-actions" role="group" aria-label="앵파크에서 놀기">
-          <button className="rbtn fly" onClick={() => setFlying(!!ctl.current?.toggleFly())} aria-pressed={flying}>{flying ? '내리기' : '날기'}</button>
-          <button className="rbtn chirp" onClick={() => { ctl.current?.chirp(); net.current?.emote('chirp'); }}>짹짹</button>
-          <button className="rbtn prank" onClick={openPrank}>장난</button>
-          <button className="rbtn more" onClick={() => setSheet('more')} aria-label="더 보기: 말하기, 같이 놀기, 간식, 집, 시점, 소리">더보기</button>
+        <div className="park-actions" role="group" aria-label={tr('앵파크에서 놀기', 'Play in the park')}>
+          <button className="rbtn fly" onClick={() => setFlying(!!ctl.current?.toggleFly())} aria-pressed={flying}>{flying ? tr('내리기', 'Land') : tr('날기', 'Fly')}</button>
+          <button className="rbtn chirp" onClick={() => { ctl.current?.chirp(); net.current?.emote('chirp'); }}>{tr('짹짹', 'Chirp')}</button>
+          <button className="rbtn prank" onClick={openPrank}>{tr('장난', 'Prank')}</button>
+          <button className="rbtn more" onClick={() => setSheet('more')} aria-label={tr('더 보기: 말하기, 같이 놀기, 간식, 집, 시점, 소리', 'More: say, play together, snack, houses, view, sound')}>{tr('더보기', 'More')}</button>
         </div>
       </div>
 
       {sheet && (
         <div className="sheet-backdrop" onClick={() => setSheet(null)}>
           <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-            aria-label={sheet === 'list' ? '집 목록' : sheet === 'say' ? '말하기' : sheet === 'birds' ? '앵무 바꾸기' : sheet === 'prank' ? '장난치기' : sheet === 'more' ? '더 보기' : '앵무 꾸미기'}>
-            <button className="sheet-close btn ghost small" onClick={() => setSheet(null)}>닫기</button>
+            aria-label={sheet === 'list' ? tr('집 목록', 'Houses') : sheet === 'say' ? tr('말하기', 'Say') : sheet === 'birds' ? tr('앵무 바꾸기', 'Switch bird') : sheet === 'prank' ? tr('장난치기', 'Pranks') : sheet === 'more' ? tr('더 보기', 'More') : tr('앵무 꾸미기', 'Dress up')}>
+            <button className="sheet-close btn ghost small" onClick={() => setSheet(null)}>{tr('닫기', 'Close')}</button>
 
             {sheet === 'birds' && (
               <>
-                <h2 className="section-title">누구랑 놀까요?</h2>
+                <h2 className="section-title">{tr('누구랑 놀까요?', 'Who are you playing as?')}</h2>
                 <div className="bird-pick">
                   {parrots.map((p) => (
                     <button key={p.id} className="bird-pick-item" aria-pressed={p.id === myBird?.id}
                       onClick={() => { setBirdId(p.id); writeKey(BIRD_KEY, String(p.id)); setSheet(null); }}>
                       <BirdAvatar colors={p.colors} species={p.species} />
                       <b>{p.name}</b>
-                      <span>{p.speciesLabel}</span>
+                      <span>{speciesName(p.species)}</span>
                     </button>
                   ))}
                 </div>
@@ -527,8 +531,8 @@ export function ParkPage() {
 
             {sheet === 'prank' && (
               <>
-                <h2 className="section-title">{prankTarget ? `${prankTarget}한테 장난치기` : '장난치기'}</h2>
-                {!prankTarget && <p className="lede">근처에 앵무가 없어요. 다른 앵무 곁으로 가서 눌러 봐요.</p>}
+                <h2 className="section-title">{prankTarget ? tr(`${prankTarget}한테 장난치기`, `Prank ${prankTarget}`) : tr('장난치기', 'Pranks')}</h2>
+                {!prankTarget && <p className="lede">{tr('근처에 앵무가 없어요. 다른 앵무 곁으로 가서 눌러 봐요.', 'No bird nearby. Go up to one and try again.')}</p>}
                 <div className="phrases">
                   {PRANKS.map((p, i) => (
                     <button key={p.label} className="chip" disabled={!prankTarget} onClick={() => doPrank(i)}>{p.label}</button>
@@ -536,30 +540,30 @@ export function ParkPage() {
                 </div>
                 <label className="park-calm">
                   <input type="checkbox" checked={calm} onChange={toggleCalm} />
-                  <span>다른 앵무의 장난 받지 않기</span>
+                  <span>{tr('다른 앵무의 장난 받지 않기', 'No pranks on me, please')}</span>
                 </label>
-                <p className="hint">장난을 받으면 되받아치거나, 화해하거나, 무시하고 날아갈 수 있어요. 두 번 연속 무시하면 그 앵무는 1분 동안 장난을 못 쳐요.</p>
+                <p className="hint">{tr('장난을 받으면 되받아치거나, 화해하거나, 무시하고 날아갈 수 있어요. 두 번 연속 무시하면 그 앵무는 1분 동안 장난을 못 쳐요.', 'When pranked you can get them back, make up, or ignore them and fly off. Ignore a bird twice in a row and it cannot prank you for a minute.')}</p>
               </>
             )}
 
             {sheet === 'say' && (
               <>
-                <h2 className="section-title">무슨 말을 할까요?</h2>
+                <h2 className="section-title">{tr('무슨 말을 할까요?', 'What do you want to say?')}</h2>
                 <div className="phrases">
-                  {PHRASES.map((p, i) => (
-                    <button key={p} className="chip" onClick={() => { ctl.current?.say(p); net.current?.say(i); setSheet(null); }}>{p}</button>
+                  {PHRASES.map((_, i) => phraseText(i)!).map((p, i) => (
+                    <button key={i} className="chip" onClick={() => { ctl.current?.say(p); net.current?.say(i); setSheet(null); }}>{p}</button>
                   ))}
                 </div>
-                <p className="hint">앵파크에서는 정해진 말만 할 수 있어요.</p>
+                <p className="hint">{tr('앵파크에서는 정해진 말만 할 수 있어요.', 'In the park you can only say these lines.')}</p>
               </>
             )}
 
             {sheet === 'dress' && (
               <>
-                <h2 className="section-title">앵파크에서 쓸 내 앵무</h2>
-                <p className="lede">로그인 없이도 이 모습으로 앵파크와 이웃집에 놀러가요. 이 기기에만 저장돼요.</p>
-                <ParrotForm compact submitLabel="이 모습으로 놀기"
-                  initial={{ name: guest.name === '손님' ? '' : guest.name, species: guest.species, colors: guest.colors, birthDate: null, adoptedDate: null }}
+                <h2 className="section-title">{tr('앵파크에서 쓸 내 앵무', 'Your bird in the park')}</h2>
+                <p className="lede">{tr('로그인 없이도 이 모습으로 앵파크와 이웃집에 놀러가요. 이 기기에만 저장돼요.', 'No login needed: you visit the park and other houses looking like this. Saved on this device only.')}</p>
+                <ParrotForm compact submitLabel={tr('이 모습으로 놀기', 'Play like this')}
+                  initial={{ name: guest.name === '손님' || guest.name === 'Guest' ? '' : guest.name, species: guest.species, colors: guest.colors, birthDate: null, adoptedDate: null }}
                   onSubmit={async (v) => {
                     const next = { name: v.name, species: v.species, colors: v.colors };
                     saveGuestBird(next);
@@ -567,9 +571,9 @@ export function ParkPage() {
                     setSheet(null);
                   }} />
                 <div className="owner-pitch">
-                  <b>실제로 키우는 앵무가 있나요?</b>
-                  <p>앵로그에 등록하면 앵파크에 우리 집이 생기고, 매일 일기를 쓰면 집 창문에 불이 켜져요. 지금 꾸민 모습을 그대로 가져가요.</p>
-                  <Link className="btn small primary" to={joinHref}>앵로그에 우리 앵무 등록하기</Link>
+                  <b>{tr('실제로 키우는 앵무가 있나요?', 'Do you have a real parrot?')}</b>
+                  <p>{tr('앵로그에 등록하면 앵파크에 우리 집이 생기고, 매일 일기를 쓰면 집 창문에 불이 켜져요. 지금 꾸민 모습을 그대로 가져가요.', 'Add it on Anglog to get a house in the park; write a diary each day and its window lights up. The look you made comes with you.')}</p>
+                  <Link className="btn small primary" to={joinHref}>{tr('앵로그에 우리 앵무 등록하기', 'Add my parrot on Anglog')}</Link>
                 </div>
               </>
             )}
@@ -578,14 +582,14 @@ export function ParkPage() {
               <>
                 {followed.length > 0 && (
                   <>
-                    <h2 className="section-title">팔로우한 집</h2>
+                    <h2 className="section-title">{tr('팔로우한 집', 'Followed houses')}</h2>
                     <div className="room-cards">{followed.map((r) => <Card key={r.owner.id} r={r} />)}</div>
                   </>
                 )}
-                <h2 className="section-title">{followed.length ? '이웃집' : '앵파크의 집들'}</h2>
+                <h2 className="section-title">{followed.length ? tr('이웃집', 'Neighbours') : tr('앵파크의 집들', 'Houses in the park')}</h2>
                 {neighbours.length > 0
                   ? <div className="room-cards">{neighbours.map((r) => <Card key={r.owner.id} r={r} />)}</div>
-                  : <p className="lede">아직 이웃이 없어요. 친구에게 앵로그를 알려 주세요.</p>}
+                  : <p className="lede">{tr('아직 이웃이 없어요. 친구에게 앵로그를 알려 주세요.', 'No neighbours yet. Tell your friends about Anglog.')}</p>}
               </>
             )}
           </div>
@@ -601,15 +605,15 @@ function Card({ r }: { r: RoomCard }) {
   const lead = r.parrots[0];
   return (
     <article className="room-card">
-      <Link to={`/play/${r.owner.handle}`} className="room-card-cover" aria-label={`${r.owner.nickname}의 집에 놀러가기`}>
+      <Link to={`/play/${r.owner.handle}`} className="room-card-cover" aria-label={tr(`${r.owner.nickname}의 집에 놀러가기`, `Visit ${r.owner.nickname}'s house`)}>
         {r.coverImageUrl ? <img src={r.coverImageUrl} alt="" loading="lazy" /> : <BirdAvatar colors={lead?.colors} species={lead?.species} />}
-        {r.featherLeftToday ? <span className="room-card-flag">오늘 다녀옴</span> : r.postedToday ? <span className="room-card-flag">오늘 일기</span> : null}
+        {r.featherLeftToday ? <span className="room-card-flag">{tr('오늘 다녀옴', 'Visited today')}</span> : r.postedToday ? <span className="room-card-flag">{tr('오늘 일기', 'New today')}</span> : null}
       </Link>
       <div className="room-card-body">
         <Link to={`/room/${r.owner.handle}`} className="room-card-name">{r.owner.nickname}</Link>
         <span className="room-card-birds">{r.parrots.map((p) => p.name).join(', ')}</span>
-        {r.latestPostAt && <span className="room-card-time">{timeAgo(r.latestPostAt)} 기록</span>}
-        <Link to={`/play/${r.owner.handle}`} className="btn small leaf">놀러가기</Link>
+        {r.latestPostAt && <span className="room-card-time">{tr(`${timeAgo(r.latestPostAt)} 기록`, `posted ${timeAgo(r.latestPostAt)}`)}</span>}
+        <Link to={`/play/${r.owner.handle}`} className="btn small leaf">{tr('놀러가기', 'Visit')}</Link>
       </div>
     </article>
   );

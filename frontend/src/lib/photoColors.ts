@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import type { ParrotColors, Species } from '../api';
 
 /*
@@ -104,7 +105,7 @@ function withL(l: Lab, L: number): Lab {
 
 /** Decodes an image file or blob. Throws a Korean message when the browser cannot read it. */
 export async function loadImage(file: Blob): Promise<ImageBitmap | HTMLImageElement> {
-  if (!file.type.startsWith('image/')) throw new Error('사진 파일만 읽을 수 있어요.');
+  if (!file.type.startsWith('image/')) throw new Error(tr('사진 파일만 읽을 수 있어요.', 'Only photo files can be read.'));
   try {
     if ('createImageBitmap' in window) return await createImageBitmap(file);
   } catch {
@@ -118,7 +119,7 @@ export async function loadImage(file: Blob): Promise<ImageBitmap | HTMLImageElem
     await img.decode();
     return img;
   } catch {
-    throw new Error('이 사진은 열 수 없어요. JPG나 PNG로 다시 시도해 주세요.');
+    throw new Error(tr('이 사진은 열 수 없어요. JPG나 PNG로 다시 시도해 주세요.', 'Could not open this photo. Please try a JPG or PNG.'));
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -135,7 +136,7 @@ export function readPixels(img: CanvasImageSource & { width: number; height: num
   cv.width = w;
   cv.height = h;
   const ctx = cv.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('이 브라우저에서는 사진을 읽을 수 없어요.');
+  if (!ctx) throw new Error(tr('이 브라우저에서는 사진을 읽을 수 없어요.', 'This browser cannot read photos.'));
   ctx.drawImage(img, 0, 0, w, h);
   return { w, h, data: ctx.getImageData(0, 0, w, h).data };
 }
@@ -400,9 +401,9 @@ export function analyzePixels(px: { w: number; h: number; data: Uint8ClampedArra
   const coverage = fg / (w * h);
   let caution: string | null = null;
   // a lot of "bird" usually means the background got mixed in
-  if (coverage > 0.33) caution = '배경이 섞였을 수 있어요. 새가 크게 나오게 자른 사진이면 더 정확해요.';
+  if (coverage > 0.33) caution = tr('배경이 섞였을 수 있어요. 새가 크게 나오게 자른 사진이면 더 정확해요.', 'Some background may be mixed in. A photo cropped close to the bird works better.');
   // blue and white color mutations look alike across species (a blue lovebird and a blue quaker)
-  else if (share(clusters, isBlue) > share(clusters, isGreen) && top.species !== 'BUDGIE') caution = '파란 계열 앵무는 종끼리 색이 비슷해서 헷갈릴 수 있어요.';
+  else if (share(clusters, isBlue) > share(clusters, isGreen) && top.species !== 'BUDGIE') caution = tr('파란 계열 앵무는 종끼리 색이 비슷해서 헷갈릴 수 있어요.', 'Blue parrots of different species look alike, so this may be off.');
   const confident = !caution && top.score >= 0.35 && top.score - second.score >= 0.15;
   return {
     clusters, barring, coverage, ranking,

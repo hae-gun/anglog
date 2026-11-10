@@ -1,7 +1,50 @@
+import { isEn, tr } from '../i18n';
 import { AdminComment, AdminGuestbook, AdminOverview, AdminUser, Api, ApiError, Comment, ParkState, FeedTab, GuestbookEntry, NewPost, Page, Parrot, ParrotInput, Post, Room, RoomCard, UserSummary } from './types';
 
 // Where the API lives. Empty: the same origin (Vite proxy in development).
 // On GitHub Pages: https://api.anglog.nobody-asked.dev (set by the Pages workflow at build time).
+/**
+ * The server writes its error messages in Korean; in English mode they are swapped by code here.
+ * Limits (characters, photos, birds) are taken from the Korean message so the two never disagree.
+ */
+const EN_ERRORS: Record<string, string> = {
+  OWN_ROOM: 'You cannot leave a feather in your own room.',
+  ALREADY_LEFT: 'You already left a feather here today. Come back tomorrow!',
+  EMPTY_GUESTBOOK: 'Please write something for the guestbook.',
+  GUESTBOOK_TOO_LONG: 'Guestbook notes can be up to {n} characters.',
+  EMPTY_POST: 'A diary needs a photo or some words.',
+  BODY_TOO_LONG: 'A diary can be up to {n} characters.',
+  TOO_MANY_IMAGES: 'You can add up to {n} photos at a time.',
+  INVALID_WEIGHT: 'Please enter the weight in grams, between 5 and 2000.',
+  BAD_IMAGE: 'Could not read that photo. Please use a JPG or PNG.',
+  FILE_TOO_LARGE: 'That photo is too big. Each photo can be up to 15 MB.',
+  NOT_FOUND: 'Could not find that.',
+  PARK_UNREACHABLE: 'Cannot reach the Parrot Park server.',
+  PARK_TOKEN_OFF: 'Park login is not available right now.',
+  SUSPENDED: 'This account has been suspended. Please contact the Anglog team.',
+  TOO_MANY_ATTEMPTS: 'Too many login attempts. Please try again in 10 minutes.',
+  INVALID_NICKNAME: 'Nicknames are 1 to 20 characters.',
+  INVALID_PASSWORD: 'Passwords are 8 to 64 characters and must differ from your ID.',
+  HANDLE_TAKEN: 'That ID is taken. Please pick another one.',
+  BAD_CREDENTIALS: 'The ID or password is not right.',
+  INVALID_HANDLE: 'IDs are 3 to 20 lowercase letters, numbers or underscores.',
+  EMPTY_COMMENT: 'Please write a comment.',
+  COMMENT_TOO_LONG: 'Comments can be up to {n} characters.',
+  SELF_FOLLOW: 'You cannot follow your own room.',
+  LOGIN_REQUIRED: 'Please log in first.',
+  FORBIDDEN: 'You cannot do that.',
+  TOO_MANY_PARROTS: 'You can add up to {n} birds.',
+  INVALID_DATE: 'That date cannot be in the future.',
+  INVALID_INPUT: 'Something in the form is not quite right.',
+  REQUEST_ERROR: 'Could not handle that request.',
+  SERVER_ERROR: 'Something went wrong. Please try again shortly.',
+};
+function englishError(code: string, ko: string) {
+  const en = EN_ERRORS[code];
+  if (!en) return 'Something went wrong. Please try again.';
+  return en.replace('{n}', ko.match(/\d+/)?.[0] ?? 'a few');
+}
+
 const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) ?? '').replace(/\/$/, '');
 
 /** Photo paths come back as /media/...; on another origin they need the API address in front. */
@@ -31,7 +74,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     res = await fetch(API_BASE + url, init);
   } catch {
     // the server is down, the network dropped, or the browser blocked the call (the raw message is "Failed to fetch")
-    throw new ApiError(0, 'NETWORK', '앵로그 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+    throw new ApiError(0, 'NETWORK', tr('앵로그 서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.', 'Could not reach the Anglog server. Please try again in a moment.'));
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
@@ -40,10 +83,12 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     data = text ? JSON.parse(text) : undefined;
   } catch {
     // an HTML error page from a proxy (502 while the server restarts, and so on)
-    throw new ApiError(res.status, 'UNAVAILABLE', '앵로그 서버가 잠시 대답하지 않아요. 조금 뒤 다시 시도해 주세요.');
+    throw new ApiError(res.status, 'UNAVAILABLE', tr('앵로그 서버가 잠시 대답하지 않아요. 조금 뒤 다시 시도해 주세요.', 'The Anglog server is not answering right now. Please try again shortly.'));
   }
   if (!res.ok) {
-    throw new ApiError(res.status, data?.code ?? 'ERROR', data?.message ?? '요청을 처리하지 못했어요.');
+    const code = data?.code ?? 'ERROR';
+    const ko = data?.message ?? '요청을 처리하지 못했어요.';
+    throw new ApiError(res.status, code, isEn() ? englishError(code, ko) : ko);
   }
   return absolutize(data) as T;
 }

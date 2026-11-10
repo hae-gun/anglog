@@ -1,4 +1,6 @@
+import { tr } from '../i18n';
 // The room as seen on a profile: a fixed quarter-view of the diorama, frames open diaries.
+import { moodName } from '../api/types';
 import * as THREE from 'three';
 import { buildRoomScene, D, disposeScene, W } from './scene.js';
 
@@ -23,12 +25,12 @@ export function mountRoom(container, room, { onFrameTap } = {}) {
     labels.appendChild(el);
     return el;
   };
-  const weightEl = tag(hasWeight ? `${Number(room.today.latestWeightG)}g` : '체중 기록 없음', 'room-tag room-tag-weight');
+  const weightEl = tag(hasWeight ? `${Number(room.today.latestWeightG)}g` : tr('체중 기록 없음', 'No weight yet'), 'room-tag room-tag-weight');
   const nameEls = hosts.map((b) => tag(b.parrot.name, 'room-tag'));
-  if (room.today && room.today.latestMoodLabel && nameEls[0]) {
+  if (room.today && room.today.latestMood && nameEls[0]) {
     const m = document.createElement('span');
     m.className = 'room-tag-mood';
-    m.textContent = room.today.latestMoodLabel;
+    m.textContent = moodName(room.today.latestMood);
     nameEls[0].appendChild(m);
   }
 

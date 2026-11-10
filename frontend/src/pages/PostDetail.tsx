@@ -4,6 +4,7 @@ import { api, Comment, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { timeAgo } from '../lib/image';
 import { useSession } from '../session';
+import { tr } from '../i18n';
 
 export function PostDetailPage() {
   const { id } = useParams();
@@ -24,7 +25,7 @@ export function PostDetailPage() {
         setPost(p);
         setComments(c.items);
       })
-      .catch((e) => alive && setError(e instanceof Error ? e.message : '불러오지 못했어요.'));
+      .catch((e) => alive && setError(e instanceof Error ? e.message : tr('불러오지 못했어요.', 'Could not load.')));
     return () => { alive = false; };
   }, [postId]);
 
@@ -42,7 +43,7 @@ export function PostDetailPage() {
       setPost((p) => (p ? { ...p, commentCount: p.commentCount + 1 } : p));
       setText('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '댓글을 남기지 못했어요.');
+      setError(err instanceof Error ? err.message : tr('댓글을 남기지 못했어요.', 'Could not post the comment.'));
     } finally {
       setBusy(false);
     }
@@ -54,12 +55,12 @@ export function PostDetailPage() {
       await api.deletePost(post.id);
       navigate(`/room/${post.author.handle}`, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '지우지 못했어요.');
+      setError(err instanceof Error ? err.message : tr('지우지 못했어요.', 'Could not delete.'));
     }
   }
 
   if (error && !post) return <div className="page"><p className="error">{error}</p></div>;
-  if (!post) return <div className="center">불러오는 중</div>;
+  if (!post) return <div className="center">{tr('불러오는 중', 'Loading')}</div>;
 
   const mine = me?.id === post.author.id;
   return (
@@ -67,8 +68,8 @@ export function PostDetailPage() {
       <PostCard key={post.id + ':' + post.commentCount} post={post} linkToDetail={false} />
       {mine && <DeleteButton onConfirm={removePost} />}
 
-      <h2 className="section-title">댓글 {comments.length}</h2>
-      {comments.length === 0 && <p className="lede">첫 댓글을 남겨 주세요.</p>}
+      <h2 className="section-title">{tr('댓글', 'Comments')} {comments.length}</h2>
+      {comments.length === 0 && <p className="lede">{tr('첫 댓글을 남겨 주세요.', 'Be the first to comment.')}</p>}
       <ul className="list">
         {comments.map((c) => (
           <li className="list-item" key={c.id}>
@@ -81,17 +82,17 @@ export function PostDetailPage() {
               <button className="btn ghost small" onClick={async () => {
                 await api.deleteComment(c.id);
                 setComments((prev) => prev.filter((x) => x.id !== c.id));
-              }}>지우기</button>
+              }}>{tr('지우기', 'Delete')}</button>
             )}
           </li>
         ))}
       </ul>
       {error && <p className="error" role="alert">{error}</p>}
       <form className="compose" onSubmit={send}>
-        <label htmlFor="comment" hidden>댓글</label>
+        <label htmlFor="comment" hidden>{tr('댓글', 'Comment')}</label>
         <input id="comment" className="input" maxLength={500} value={text} onChange={(e) => setText(e.target.value)}
-          placeholder={me ? '따뜻한 한마디' : '로그인하면 댓글을 남길 수 있어요'} />
-        <button className="btn primary" disabled={busy}>남기기</button>
+          placeholder={me ? tr('따뜻한 한마디', 'Say something kind') : tr('로그인하면 댓글을 남길 수 있어요', 'Log in to comment')} />
+        <button className="btn primary" disabled={busy}>{tr('남기기', 'Post')}</button>
       </form>
     </div>
   );
@@ -99,12 +100,12 @@ export function PostDetailPage() {
 
 function DeleteButton({ onConfirm }: { onConfirm: () => void }) {
   const [asking, setAsking] = useState(false);
-  if (!asking) return <button className="btn ghost small" style={{ alignSelf: 'flex-end' }} onClick={() => setAsking(true)}>일기 지우기</button>;
+  if (!asking) return <button className="btn ghost small" style={{ alignSelf: 'flex-end' }} onClick={() => setAsking(true)}>{tr('일기 지우기', 'Delete diary')}</button>;
   return (
     <div className="row" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
-      <span className="lede">정말 지울까요? 되돌릴 수 없어요.</span>
-      <button className="btn small" onClick={() => setAsking(false)}>그대로 두기</button>
-      <button className="btn small primary" onClick={onConfirm}>지우기</button>
+      <span className="lede">{tr('정말 지울까요? 되돌릴 수 없어요.', 'Delete for good? This cannot be undone.')}</span>
+      <button className="btn small" onClick={() => setAsking(false)}>{tr('그대로 두기', 'Keep it')}</button>
+      <button className="btn small primary" onClick={onConfirm}>{tr('지우기', 'Delete')}</button>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, FeedTab, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { useSession } from '../session';
+import { tr } from '../i18n';
 
 export function FeedPage() {
   const { me } = useSession();
@@ -26,7 +27,7 @@ export function FeedPage() {
       setCursor(page.nextCursor);
       setDone(page.nextCursor == null);
     } catch (e) {
-      if (id === reqId.current) setError(e instanceof Error ? e.message : '불러오지 못했어요.');
+      if (id === reqId.current) setError(e instanceof Error ? e.message : tr('불러오지 못했어요.', 'Could not load.'));
     } finally {
       if (id === reqId.current) setLoading(false);
     }
@@ -53,16 +54,16 @@ export function FeedPage() {
   return (
     <div className="page">
       {me && (
-        <div className="tabs" role="tablist" aria-label="피드 종류">
-          <button className="tab" role="tab" aria-selected={tab === 'following'} onClick={() => setTab('following')}>팔로잉</button>
-          <button className="tab" role="tab" aria-selected={tab === 'latest'} onClick={() => setTab('latest')}>최신</button>
+        <div className="tabs" role="tablist" aria-label={tr('피드 종류', 'Feed')}>
+          <button className="tab" role="tab" aria-selected={tab === 'following'} onClick={() => setTab('following')}>{tr('팔로잉', 'Following')}</button>
+          <button className="tab" role="tab" aria-selected={tab === 'latest'} onClick={() => setTab('latest')}>{tr('최신', 'Latest')}</button>
         </div>
       )}
       {!me && (
         <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <strong style={{ font: '18px/1.3 var(--display)' }}>우리 앵무 일기도 써 볼까요?</strong>
-          <span className="lede">기록할수록 내 앵무가 사는 3D 방이 채워져요.</span>
-          <Link className="btn primary" to="/login">시작하기</Link>
+          <strong style={{ font: '18px/1.3 var(--display)' }}>{tr('우리 앵무 일기도 써 볼까요?', 'Keep a diary for your parrot?')}</strong>
+          <span className="lede">{tr('기록할수록 내 앵무가 사는 3D 방이 채워져요.', 'Every entry fills up the 3D room your bird lives in.')}</span>
+          <Link className="btn primary" to="/login">{tr('시작하기', 'Get started')}</Link>
         </div>
       )}
 
@@ -70,10 +71,10 @@ export function FeedPage() {
       {items.map((p) => <PostCard key={p.id} post={p} />)}
       {!loading && !error && items.length === 0 && (
         <div className="empty">
-          {tab === 'following' ? '아직 팔로우한 방이 없어요. 최신 탭에서 다른 집 앵무를 구경해 보세요.' : '아직 일기가 없어요. 첫 일기를 남겨 주세요.'}
+          {tab === 'following' ? tr('아직 팔로우한 방이 없어요. 최신 탭에서 다른 집 앵무를 구경해 보세요.', 'You are not following any rooms yet. Look around in Latest.') : tr('아직 일기가 없어요. 첫 일기를 남겨 주세요.', 'No diaries yet. Be the first!')}
         </div>
       )}
-      {loading && <p className="lede" style={{ textAlign: 'center' }}>불러오는 중</p>}
+      {loading && <p className="lede" style={{ textAlign: 'center' }}>{tr('불러오는 중', 'Loading')}</p>}
       <div ref={sentinel} />
     </div>
   );

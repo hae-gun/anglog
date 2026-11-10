@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 // Shapes returned by the Spring API (backend/src/main/java/com/jjaklog/**/…View.java).
 
 export type Species = 'BUDGIE' | 'LOVEBIRD' | 'COCKATIEL' | 'QUAKER' | 'GREEN_CHEEKED_CONURE' | 'OTHER';
@@ -230,19 +231,23 @@ export class ApiError extends Error {
 }
 
 export const SPECIES: { value: Species; label: string }[] = [
-  { value: 'LOVEBIRD', label: '모란앵무' },
-  { value: 'BUDGIE', label: '사랑앵무' },
-  { value: 'COCKATIEL', label: '왕관앵무' },
-  { value: 'QUAKER', label: '퀘이커' },
-  { value: 'GREEN_CHEEKED_CONURE', label: '그린칙코뉴어' },
-  { value: 'OTHER', label: '기타' },
+  { value: 'LOVEBIRD', get label() { return tr('모란앵무', 'Lovebird'); } },
+  { value: 'BUDGIE', get label() { return tr('사랑앵무', 'Budgie'); } },
+  { value: 'COCKATIEL', get label() { return tr('왕관앵무', 'Cockatiel'); } },
+  { value: 'QUAKER', get label() { return tr('퀘이커', 'Quaker'); } },
+  { value: 'GREEN_CHEEKED_CONURE', get label() { return tr('그린칙코뉴어', 'Green-cheeked conure'); } },
+  { value: 'OTHER', get label() { return tr('기타', 'Other'); } },
 ];
 
+/** Species and mood names in the screen's language (the server sends Korean labels). */
+export const speciesName = (v: string | null | undefined) => SPECIES.find((x) => x.value === v)?.label ?? tr('기타', 'Other');
+export const moodName = (v: string | null | undefined) => (v ? MOODS.find((x) => x.value === v)?.label ?? null : null);
+
 export const MOODS: { value: Mood; label: string }[] = [
-  { value: 'HAPPY', label: '신나요' },
-  { value: 'CALM', label: '평온해요' },
-  { value: 'SLEEPY', label: '졸려요' },
-  { value: 'PLAYFUL', label: '장난꾸러기' },
-  { value: 'GRUMPY', label: '삐졌어요' },
-  { value: 'HUNGRY', label: '배고파요' },
+  { value: 'HAPPY', get label() { return tr('신나요', 'Happy'); } },
+  { value: 'CALM', get label() { return tr('평온해요', 'Calm'); } },
+  { value: 'SLEEPY', get label() { return tr('졸려요', 'Sleepy'); } },
+  { value: 'PLAYFUL', get label() { return tr('장난꾸러기', 'Playful'); } },
+  { value: 'GRUMPY', get label() { return tr('삐졌어요', 'Grumpy'); } },
+  { value: 'HUNGRY', get label() { return tr('배고파요', 'Hungry'); } },
 ];

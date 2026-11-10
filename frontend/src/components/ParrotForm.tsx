@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { ParrotColors, ParrotInput, Species, SPECIES } from '../api';
 import { analyzePhoto, partsFor, PhotoAnalysis } from '../lib/photoColors';
 import { BirdAvatar } from './BirdAvatar';
+import { tr } from '../i18n';
 
 /** Typical colors per species, used as a starting point when the species is picked. */
 const SPECIES_COLORS: Record<Species, ParrotColors> = {
@@ -14,11 +15,11 @@ const SPECIES_COLORS: Record<Species, ParrotColors> = {
 };
 
 const PARTS: { key: keyof ParrotColors; label: string }[] = [
-  { key: 'face', label: '얼굴' },
-  { key: 'head', label: '머리' },
-  { key: 'body', label: '몸' },
-  { key: 'wing', label: '날개' },
-  { key: 'tail', label: '꼬리' },
+  { key: 'face', get label() { return tr('얼굴', 'Face'); } },
+  { key: 'head', get label() { return tr('머리', 'Head'); } },
+  { key: 'body', get label() { return tr('몸', 'Body'); } },
+  { key: 'wing', get label() { return tr('날개', 'Wings'); } },
+  { key: 'tail', get label() { return tr('꼬리', 'Tail'); } },
 ];
 
 function randomColors(): ParrotColors {
@@ -42,7 +43,7 @@ function randomColors(): ParrotColors {
   };
 }
 
-const speciesLabel = (s: Species) => SPECIES.find((x) => x.value === s)?.label ?? '기타';
+const speciesLabel = (s: Species) => SPECIES.find((x) => x.value === s)?.label ?? tr('기타', 'Other');
 
 interface PhotoState {
   url: string;
@@ -63,11 +64,11 @@ function PhotoPicker({ photo, busy, error, onFile, onUndo }: {
   const a = photo?.analysis;
   let verdict = '';
   if (a) {
-    if (!a.species) verdict = '종은 잘 모르겠어요. 아래에서 골라 주세요. 색은 사진에서 가져왔어요.';
-    else if (a.confident) verdict = `${speciesLabel(a.species)} 같아요. 색도 사진에서 가져왔어요.`;
+    if (!a.species) verdict = tr('종은 잘 모르겠어요. 아래에서 골라 주세요. 색은 사진에서 가져왔어요.', 'Not sure of the species, please pick it below. The colors came from the photo.');
+    else if (a.confident) verdict = tr(`${speciesLabel(a.species)} 같아요. 색도 사진에서 가져왔어요.`, `Looks like a ${speciesLabel(a.species)}. The colors came from the photo too.`);
     else {
-      const alt = a.ranking[1] && a.ranking[1].score >= 0.15 ? `, ${speciesLabel(a.ranking[1].species)}일 수도 있어요` : '';
-      verdict = `아마 ${speciesLabel(a.species)}${alt}. 다르면 아래에서 종을 바꿔 주세요.`;
+      const alt = a.ranking[1] && a.ranking[1].score >= 0.15 ? tr(`, ${speciesLabel(a.ranking[1].species)}일 수도 있어요`, ` (or maybe a ${speciesLabel(a.ranking[1].species)})`) : '';
+      verdict = tr(`아마 ${speciesLabel(a.species)}${alt}. 다르면 아래에서 종을 바꿔 주세요.`, `Probably a ${speciesLabel(a.species)}${alt}. If not, change the species below.`);
     }
   }
   return (
@@ -82,15 +83,15 @@ function PhotoPicker({ photo, busy, error, onFile, onUndo }: {
       }}>
       <input ref={input} type="file" accept="image/*" hidden
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }} />
-      {photo && <img src={photo.url} alt="올린 앵무 사진" className="photo-thumb" />}
+      {photo && <img src={photo.url} alt={tr('올린 앵무 사진', 'Your parrot photo')} className="photo-thumb" />}
       <div className="photo-body">
-        {!photo && !busy && <p className="photo-title">사진으로 색 찾기</p>}
-        {busy && <p className="photo-title" role="status">사진 보는 중</p>}
+        {!photo && !busy && <p className="photo-title">{tr('사진으로 색 찾기', 'Find colors from a photo')}</p>}
+        {busy && <p className="photo-title" role="status">{tr('사진 보는 중', 'Looking at the photo')}</p>}
         {photo && !busy && a && (
           <>
             <p className="photo-title" role="status">{verdict}</p>
             {a.caution && <p className="hint">{a.caution}</p>}
-            <div className="photo-palette" aria-label="사진에서 찾은 색">
+            <div className="photo-palette" aria-label={tr('사진에서 찾은 색', 'Colors from the photo')}>
               {a.clusters.slice(0, 6).map((c) => <span key={c.hex + c.share} style={{ background: c.hex, flexGrow: Math.max(0.4, c.share * 10) }} title={c.hex} />)}
             </div>
           </>
@@ -98,11 +99,11 @@ function PhotoPicker({ photo, busy, error, onFile, onUndo }: {
         {error && <p className="error" role="alert">{error}</p>}
         <div className="row">
           <button type="button" className="btn small primary" disabled={busy} onClick={() => input.current?.click()}>
-            {photo ? '다른 사진' : '사진 고르기'}
+            {photo ? tr('다른 사진', 'Another photo') : tr('사진 고르기', 'Choose a photo')}
           </button>
-          {photo && <button type="button" className="btn small" onClick={onUndo}>되돌리기</button>}
+          {photo && <button type="button" className="btn small" onClick={onUndo}>{tr('되돌리기', 'Undo')}</button>}
         </div>
-        {!photo && <span className="hint">사진을 붙여넣거나 여기에 끌어다 놓아도 돼요. 사진은 이 기기에서만 보고 어디에도 올리지 않아요.</span>}
+        {!photo && <span className="hint">{tr('사진을 붙여넣거나 여기에 끌어다 놓아도 돼요. 사진은 이 기기에서만 보고 어디에도 올리지 않아요.', 'You can also paste or drop a photo here. It is only read on this device and never uploaded.')}</span>}
       </div>
     </div>
   );
@@ -132,7 +133,7 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
       // the old preview address is released by the effect below
       setPhoto((old) => ({ url: URL.createObjectURL(file), analysis, before: old ? old.before : { species: cur.species, colors: cur.colors } }));
     } catch (err) {
-      setPhotoError(err instanceof Error ? err.message : '사진을 읽지 못했어요.');
+      setPhotoError(err instanceof Error ? err.message : tr('사진을 읽지 못했어요.', 'Could not read the photo.'));
     } finally {
       setPhotoBusy(false);
     }
@@ -163,7 +164,7 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!v.name.trim()) {
-      setError('이름을 적어 주세요.');
+      setError(tr('이름을 적어 주세요.', 'Please enter a name.'));
       return;
     }
     setBusy(true);
@@ -171,7 +172,7 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
     try {
       await onSubmit({ ...v, name: v.name.trim() });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '저장하지 못했어요.');
+      setError(err instanceof Error ? err.message : tr('저장하지 못했어요.', 'Could not save.'));
     } finally {
       setBusy(false);
     }
@@ -179,17 +180,17 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
 
   return (
     <form onSubmit={submit} className="page" style={{ padding: 0 }}>
-      <div className="preview-bird"><BirdAvatar colors={v.colors} species={v.species} title={`${v.name || '내 앵무'} 미리보기`} /></div>
+      <div className="preview-bird"><BirdAvatar colors={v.colors} species={v.species} title={tr(`${v.name || '내 앵무'} 미리보기`, `${v.name || 'My parrot'} preview`)} /></div>
 
       <div className="field">
-        <label htmlFor="pname">이름</label>
-        <input id="pname" className="input" maxLength={20} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="머란이" />
+        <label htmlFor="pname">{tr('이름', 'Name')}</label>
+        <input id="pname" className="input" maxLength={20} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={tr('머란이', 'Mango')} />
       </div>
 
       <PhotoPicker photo={photo} busy={photoBusy} error={photoError} onFile={readPhoto} onUndo={undoPhoto} />
 
       <div className="field">
-        <span className="label" id="species-label">종</span>
+        <span className="label" id="species-label">{tr('종', 'Species')}</span>
         <div className="chips" role="group" aria-labelledby="species-label">
           {SPECIES.map((s) => (
             <button type="button" key={s.value} className="chip" aria-pressed={v.species === s.value}
@@ -206,17 +207,17 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
 
       {!compact && <div className="row">
         <div className="field">
-          <label htmlFor="adopted">입양일</label>
+          <label htmlFor="adopted">{tr('입양일', 'Adopted on')}</label>
           <input id="adopted" type="date" className="input" max={today} value={v.adoptedDate ?? ''} onChange={(e) => setV({ ...v, adoptedDate: e.target.value || null })} />
         </div>
         <div className="field">
-          <label htmlFor="birth">생일 (알면)</label>
+          <label htmlFor="birth">{tr('생일 (알면)', 'Birthday (if known)')}</label>
           <input id="birth" type="date" className="input" max={today} value={v.birthDate ?? ''} onChange={(e) => setV({ ...v, birthDate: e.target.value || null })} />
         </div>
       </div>}
 
       <div className="field">
-        <span className="label">색</span>
+        <span className="label">{tr('색', 'Colors')}</span>
         <div className="swatches">
           {PARTS.map((part) => (
             <label className="sw" key={part.key}>
@@ -226,14 +227,14 @@ export function ParrotForm({ initial, submitLabel, onSubmit, compact = false }: 
           ))}
         </div>
         <div className="row" style={{ marginTop: 6 }}>
-          <button type="button" className="btn small" onClick={() => setV({ ...v, colors: SPECIES_COLORS[v.species] })}>종 기본색</button>
-          <button type="button" className="btn small primary" onClick={() => setV({ ...v, colors: randomColors() })}>랜덤 색</button>
+          <button type="button" className="btn small" onClick={() => setV({ ...v, colors: SPECIES_COLORS[v.species] })}>{tr('종 기본색', 'Species colors')}</button>
+          <button type="button" className="btn small primary" onClick={() => setV({ ...v, colors: randomColors() })}>{tr('랜덤 색', 'Random')}</button>
         </div>
-        <span className="hint">{compact ? '앵파크와 방에서 이 모습으로 돌아다녀요.' : '방 안의 3D 앵무도 이 색으로 보여요.'}</span>
+        <span className="hint">{compact ? tr('앵파크와 방에서 이 모습으로 돌아다녀요.', 'This is how your bird looks in the park and in rooms.') : tr('방 안의 3D 앵무도 이 색으로 보여요.', 'The 3D bird in your room uses these colors too.')}</span>
       </div>
 
       {error && <p className="error" role="alert">{error}</p>}
-      <button className="btn primary block" disabled={busy}>{busy ? '저장하는 중' : submitLabel}</button>
+      <button className="btn primary block" disabled={busy}>{busy ? tr('저장하는 중', 'Saving') : submitLabel}</button>
     </form>
   );
 }

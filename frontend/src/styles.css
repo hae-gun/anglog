@@ -297,6 +297,7 @@ img { max-width: 100%; display: block; }
 .park-note { top: calc(56px + env(safe-area-inset-top, 0px)); }
 .park-plate { position: absolute; left: 0; top: 0; white-space: nowrap; font: 12px/1 var(--display); padding: 4px 7px; border-radius: 6px; background: rgba(255, 248, 236, 0.92); color: var(--ink); border: 1.5px solid var(--ink); will-change: transform; }
 .park-plate.lit::after { content: '오늘 일기'; margin-left: 5px; padding: 1px 5px; border-radius: 4px; background: var(--seed); font-size: 10.5px; }
+html[lang="en"] .park-plate.lit::after { content: 'New today'; }
 .park-plate.mine { background: var(--seed); }
 .room-tag-live { background: #2F6FB0; }
 .park-controls { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; padding: 0 12px calc(14px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; pointer-events: none; }

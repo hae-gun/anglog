@@ -1,3 +1,4 @@
+import { tr } from '../i18n';
 import { useRef, useState } from 'react';
 
 /** Thumb stick: reports x (right) and y (forward) in -1..1 while held, and 0, 0 on release. */
@@ -30,7 +31,7 @@ export function Joystick({ onChange }: { onChange: (x: number, y: number) => voi
       ref={base}
       className="stick"
       role="application"
-      aria-label="이동 조이스틱. 누른 채로 밀면 그쪽으로 걸어가요."
+      aria-label={tr('이동 조이스틱. 누른 채로 밀면 그쪽으로 걸어가요.', 'Movement stick. Hold and push to walk that way.')}
       onPointerDown={(e) => {
         active.current = e.pointerId;
         e.currentTarget.setPointerCapture(e.pointerId);

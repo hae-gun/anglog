@@ -7,6 +7,10 @@ import * as THREE from 'three';
 import { playCall, playFx } from '../lib/sound';
 import { makeBird, toLinear } from './bird.js';
 import { disposeScene, mat, rod, skyNow } from './scene.js';
+import { tr } from '../i18n';
+
+/** Lines in both languages: L(['안녕'], ['Hi']). pick() takes the current language's list. */
+const L = (ko, en) => ({ ko, en });
 
 const PARK_R = 34;
 const RING_IN = 11;
@@ -24,20 +28,20 @@ const FLY_SPEED = 6.2;
 const clamp = THREE.MathUtils.clamp;
 
 const AUTUMN = ['#D9442B', '#E8662E', '#F08A24', '#C7362F', '#F2B33D', '#B8432A', '#E9A13B'];
-const CHIRPS = ['짹짹!', '짹!', '삐요', '짹짹짹'];
-const REPLIES = ['짹!', '삐약', '누구야?', '반가워!', '짹짹', '안녕!'];
-const HELLO = ['안녕!', '처음 보는 얼굴이네', '짹! 같이 놀자', '단풍 예쁘지?'];
-const PLAY_LINES = ['신난다!', '한 번 더!', '짹짹짹!', '같이 춤추자'];
+const CHIRPS = L(['짹짹!', '짹!', '삐요', '짹짹짹'], ['Tweet!', 'Chirp!', 'Peep', 'Tweet tweet']);
+const REPLIES = L(['짹!', '삐약', '누구야?', '반가워!', '짹짹', '안녕!'], ['Chirp!', 'Peep', 'Who\'s that?', 'Hi there!', 'Tweet', 'Hello!']);
+const HELLO = L(['안녕!', '처음 보는 얼굴이네', '짹! 같이 놀자', '단풍 예쁘지?'], ['Hi!', 'New face!', 'Chirp! Let\'s play', 'Pretty leaves, huh?']);
+const PLAY_LINES = L(['신난다!', '한 번 더!', '짹짹짹!', '같이 춤추자'], ['Yay!', 'Again!', 'Tweet tweet!', 'Let\'s dance']);
 // pranks between birds, by kind number (the same numbers go over the network: docs/park-realtime.md, 8)
 // me: what the prankster says, them: what the pranked bird says
 const PRANKS = [
-  { me: ['콕!', '콕콕!', '헤헤'], them: ['꽥!', '아야!', '뭐야!'] }, // 0 poke
-  { me: ['비켜!', '영차!', '내 자리야'], them: ['어어어!', '으악!', '왜 밀어!'] }, // 1 shove
-  { me: ['냠!', '내 거다!', '맛있다~'], them: ['내 간식!', '돌려줘!', '야!'] }, // 2 snatch a snack
-  { me: ['여기 좋다!', '높다!', '출발~'], them: ['무거워!', '내려와!', '머리가...'] }, // 3 sit on the head
-  { me: ['다듬어 줄게~'], them: ['고마워~'] }, // 4 pretend to preen, then poke
+  { me: L(['콕!', '콕콕!', '헤헤'], ['Poke!', 'Poke poke!', 'Hehe']), them: L(['꽥!', '아야!', '뭐야!'], ['Squawk!', 'Ouch!', 'Hey!']) }, // 0 poke
+  { me: L(['비켜!', '영차!', '내 자리야'], ['Move!', 'Heave!', 'My spot']), them: L(['어어어!', '으악!', '왜 밀어!'], ['Whoa!', 'Argh!', 'Don\'t push!']) }, // 1 shove
+  { me: L(['냠!', '내 거다!', '맛있다~'], ['Nom!', 'Mine!', 'Yummy~']), them: L(['내 간식!', '돌려줘!', '야!'], ['My snack!', 'Give it back!', 'Hey!']) }, // 2 snatch a snack
+  { me: L(['여기 좋다!', '높다!', '출발~'], ['Nice up here!', 'So high!', 'Giddy up~']), them: L(['무거워!', '내려와!', '머리가...'], ['Heavy!', 'Get down!', 'My head...']) }, // 3 sit on the head
+  { me: L(['다듬어 줄게~'], ['Let me preen you~']), them: L(['고마워~'], ['Thanks~']) }, // 4 pretend to preen, then poke
 ];
-const MAKE_UP_LINES = [['미안해~', '헤헤'], ['우리 화해하자', '좋아!'], ['장난이었어', '알아~']];
+const MAKE_UP_LINES = L([['미안해~', '헤헤'], ['우리 화해하자', '좋아!'], ['장난이었어', '알아~']], [['Sorry~', 'Hehe'], ['Let\'s make up', 'OK!'], ['Just kidding', 'I know~']]);
 const MODE_CODE = { idle: 0, CALM: 0, WALK: 1, FLY: 2, DANCE: 3, HAPPY: 4, CHIRP: 5, PREEN: 6, SPLASH: 7 };
 const CODE_MODE = ['idle', 'WALK', 'FLY', 'DANCE', 'HAPPY', 'CHIRP', 'PREEN', 'SPLASH'];
 
@@ -47,7 +51,7 @@ function lerpAngle(a, b, k) {
   const d = ((((b - a + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) - Math.PI;
   return a + d * k;
 }
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const pick = (a) => { const arr = Array.isArray(a) ? a : tr(a.ko, a.en); return arr[Math.floor(Math.random() * arr.length)]; };
 function mulberry(seed) {
   return () => {
     seed |= 0;
@@ -607,7 +611,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   function eatPersimmon(a, bi) {
     const f = fruits.find((x) => x.branch === bi && x.m.visible);
     act(a, 'EAT', 2.4);
-    say(a, f ? pick(['냠냠!', '달다!', '홍시 최고']) : '다 먹었네...', 1.8);
+    say(a, f ? pick(L(['냠냠!', '달다!', '홍시 최고'], ['Nom nom!', 'Sweet!', 'Persimmons rule'])) : tr('다 먹었네...', 'All gone...'), 1.8);
     if (f) { f.m.visible = false; f.back = clock + 40; }
   }
   ticks.push(() => fruits.forEach((f) => { if (!f.m.visible && clock > f.back) f.m.visible = true; }));
@@ -664,7 +668,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   obstacles.push({ x: GZ.x, z: GZ.z, r: 1.4, h: 2.6 });
   const gymTop = (u) => gym.localToWorld(new THREE.Vector3(clamp(u, -1.0, 1.0), 2.7, 0));
   gymLanding = (x, z) => ({ p: gymTop(gym.worldToLocal(new THREE.Vector3(x, 0, z)).x), surface: 'gym' });
-  const ringDing = (who) => { ding = 1; say(who, pick(['땡그랑!', '땡땡!', '높다!']), 1.4); playCall('chirp', 1.5, loudness(who) * 0.5); };
+  const ringDing = (who) => { ding = 1; say(who, pick(L(['땡그랑!', '땡땡!', '높다!'], ['Ding!', 'Ding ding!', 'So high!'])), 1.4); playCall('chirp', 1.5, loudness(who) * 0.5); };
   {
     const g = new THREE.BoxGeometry(2.4, 0.7, 0.7);
     g.rotateY(gym.rotation.y);
@@ -673,7 +677,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       return { p: gymTop(local.x), surface: 'gym', after: ringDing };
     }]);
     const ringSpot = gym.localToWorld(new THREE.Vector3(-0.45, 1.5, 0));
-    zoneLands.push([new THREE.SphereGeometry(0.5, 8, 6), ringSpot.clone().setY(1.5), () => ({ p: ringSpot.clone(), surface: 'ring', after: (who) => say(who, '흔들흔들', 1.2) })]);
+    zoneLands.push([new THREE.SphereGeometry(0.5, 8, 6), ringSpot.clone().setY(1.5), () => ({ p: ringSpot.clone(), surface: 'ring', after: (who) => say(who, tr('흔들흔들', 'Swing swing'), 1.2) })]);
     zoneSpots.push(() => ({ p: gymTop((Math.random() - 0.5) * 1.8), surface: 'gym', after: ringDing }));
   }
 
@@ -709,7 +713,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   scene.add(finial);
   const roofTop = new THREE.Vector3(PV.x, 4.2, PV.z);
   obstacles.push({ x: PV.x, z: PV.z, r: 3.7, h: 4.1, low: 2.35, air: true });
-  zoneLands.push([new THREE.CylinderGeometry(1.2, 2.2, 1.4, 6), new THREE.Vector3(PV.x, 3.4, PV.z), () => ({ p: roofTop.clone(), surface: 'roof', after: (who) => say(who, pick(['경치 좋다!', '여기 최고', '단풍 바다다']), 1.8) })]);
+  zoneLands.push([new THREE.CylinderGeometry(1.2, 2.2, 1.4, 6), new THREE.Vector3(PV.x, 3.4, PV.z), () => ({ p: roofTop.clone(), surface: 'roof', after: (who) => say(who, pick(L(['경치 좋다!', '여기 최고', '단풍 바다다'], ['What a view!', 'Best spot', 'A sea of leaves'])), 1.8) })]);
   zoneSpots.push(() => (actors.some((o) => o.pos.distanceTo(roofTop) < 0.5) ? null : { p: roofTop.clone(), surface: 'roof' }));
   zoneSpots.push(() => { const a = Math.random() * 6.28; return { p: groundPoint(PV.x + Math.cos(a) * 1.3, PV.z + Math.sin(a) * 1.3), surface: 'ground' }; });
 
@@ -1104,7 +1108,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       center: pos.clone(),
       ridgeA: g.localToWorld(new THREE.Vector3(0, 2.77, -0.85)),
       ridgeB: g.localToWorld(new THREE.Vector3(0, 2.77, 0.85)),
-      plate: el(`park-plate${lit ? ' lit' : ''}${card.mine ? ' mine' : ''}`, card.mine ? '내 집' : card.owner.nickname),
+      plate: el(`park-plate${lit ? ' lit' : ''}${card.mine ? ' mine' : ''}`, card.mine ? tr('내 집', 'My house') : card.owner.nickname),
     });
     obstacles.push({ x: pos.x, z: pos.z, r: 1.5, h: 2.9 });
   }
@@ -1428,7 +1432,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       if (s.after) s.after(r);
       if (s.look) r.rotTarget = angleTo(r.pos, s.look);
       if (s.surface === 'bath') { act(r, 'SPLASH', 3.6); r.rotTarget = angleTo(r.pos, new THREE.Vector3(BATH.x, 0, BATH.z)); }
-      else if (s.wade) { act(r, 'SPLASH', 3.6 + Math.random() * 2.4); if (Math.random() < 0.5) say(r, pick(['첨벙첨벙', '물놀이다!', '시원해']), 1.4); }
+      else if (s.wade) { act(r, 'SPLASH', 3.6 + Math.random() * 2.4); if (Math.random() < 0.5) say(r, pick(L(['첨벙첨벙', '물놀이다!', '시원해'], ['Splish splash', 'Water time!', 'So cool'])), 1.4); }
       else if (s.surface === 'perch') r.rotTarget = dirAngle(r.house.front.x - r.house.perch.x, r.house.front.z - r.house.perch.z);
     });
   }
@@ -1461,7 +1465,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const toPerch = () => {
       flyTo(player, hh.perch, 'perch', () => {
         player.rotTarget = dirAngle(hh.door.x - hh.perch.x, hh.door.z - hh.perch.z);
-        say(player, hh.card.mine ? '다녀왔어요!' : '실례합니다!', 1.2);
+        say(player, hh.card.mine ? tr('다녀왔어요!', 'I\'m home!') : tr('실례합니다!', 'Excuse me!'), 1.2);
         playCall('chirp', 1, 0.8);
         setTimeout(() => { if (entering) entering = { h: hh, phase: 'in', t0: clock }; }, 650);
       });
@@ -1709,12 +1713,12 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     let target, surface = 'ground', dx = 0, after = null;
     const hit = ray.intersectObjects(landables, false)[0];
     if (hit) {
-      const L = hit.object.userData.land(hit.point);
-      if (!L) { say(player, '자리가 없어요', 1); return; }
-      target = L.p;
-      surface = L.surface;
-      dx = L.dx ?? 0;
-      after = L.after || null;
+      const got = hit.object.userData.land(hit.point);
+      if (!got) { say(player, tr('자리가 없어요', 'No room here'), 1); return; }
+      target = got.p;
+      surface = got.surface;
+      dx = got.dx ?? 0;
+      after = got.after || null;
     } else {
       const p = new THREE.Vector3();
       if (!ray.ray.intersectPlane(plane, p)) return;
@@ -1724,10 +1728,10 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     player.action = null;
     goTo(player, target, surface, () => {
       if (after) after(player);
-      if (surface === 'swing') { player.swingDx = dx; say(player, '흔들흔들', 1.2); }
-      if (surface === 'bath') { act(player, 'SPLASH', 3.6); say(player, '첨벙첨벙', 1.4); player.splashAt = clock + 7; }
+      if (surface === 'swing') { player.swingDx = dx; say(player, tr('흔들흔들', 'Swing swing'), 1.2); }
+      if (surface === 'bath') { act(player, 'SPLASH', 3.6); say(player, tr('첨벙첨벙', 'Splish splash'), 1.4); player.splashAt = clock + 7; }
       else if (surface === 'ground' && waterAt(player.pos.x, player.pos.z)) { act(player, 'SPLASH', 3.6); player.splashAt = clock + 7; }
-      else if (surface === 'canopy') say(player, pick(['나무 꼭대기다!', '하늘이 가까워', '여기 최고']), 1.4);
+      else if (surface === 'canopy') say(player, pick(L(['나무 꼭대기다!', '하늘이 가까워', '여기 최고'], ['Treetop!', 'Close to the sky', 'Best spot'])), 1.4);
     });
     marker.position.set(target.x, target.y + 0.03, target.z);
     markerT = clock;
@@ -1805,9 +1809,9 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       flying = false;
       landing = false;
       player.surface = below.surface;
-      if (below.surface === 'roof') say(player, pick(['지붕 위다!', '높다!']), 1.2);
-      if (below.surface === 'canopy') say(player, pick(['나무 꼭대기다!', '단풍 이불이다']), 1.2);
-      if (below.surface === 'branch') say(player, pick(['나뭇가지 위!', '여기 좋다']), 1.2);
+      if (below.surface === 'roof') say(player, pick(L(['지붕 위다!', '높다!'], ['On the roof!', 'So high!'])), 1.2);
+      if (below.surface === 'canopy') say(player, pick(L(['나무 꼭대기다!', '단풍 이불이다'], ['Treetop!', 'A blanket of leaves'])), 1.2);
+      if (below.surface === 'branch') say(player, pick(L(['나뭇가지 위!', '여기 좋다'], ['On a branch!', 'Nice here'])), 1.2);
     }
   }
 
@@ -1859,7 +1863,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     entering = { h: from, phase: 'out', t0: 0 };
   } else {
     player.pos.set(0, 5, PARK_R + 2);
-    const hello = wet ? '비가 와요' : snowy ? (new Date().getMonth() === 10 ? '첫눈이다!' : '눈이다!') : env.night ? '밤 공원이다' : '가을이다!';
+    const hello = wet ? tr('비가 와요', 'It\'s raining') : snowy ? (new Date().getMonth() === 10 ? tr('첫눈이다!', 'First snow!') : tr('눈이다!', 'Snow!')) : env.night ? tr('밤 공원이다', 'The park at night') : tr('가을이다!', 'Autumn!');
     flyTo(player, groundPoint(0, 23), 'ground', () => { say(player, hello, 1.8); playCall('chirp', 1, 0.8); });
   }
   stepCamera(0, true);
@@ -1915,7 +1919,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     seedsDirty = true;
     if (a.pos.distanceTo(player.pos) < 8) playFx('crunch', a.isPlayer ? 0.35 : 0.18);
   }
-  const YUM = ['냠냠', '맛있다!', '해바라기씨다', '오독오독', '하나 더!'];
+  const YUM = L(['냠냠', '맛있다!', '해바라기씨다', '오독오독', '하나 더!'], ['Nom nom', 'Yummy!', 'Sunflower seeds', 'Crunch crunch', 'One more!']);
   /** Birds within reach come over, settle round the pile and eat. */
   function callToSnack(pile) {
     residents
@@ -1953,7 +1957,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
           if (Math.hypot(a.pos.x - pile.x, a.pos.z - pile.z) > 1.6 || clock < (a.biteAt || 0)) return;
           eatFrom(pile, a);
           a.biteAt = clock + 0.8 + Math.random() * 0.5;
-          if (pile.left <= 0 && Math.random() < 0.5) say(a, '다 먹었다', 1.2);
+          if (pile.left <= 0 && Math.random() < 0.5) say(a, tr('다 먹었다', 'All gone'), 1.2);
         });
         continue;
       }
@@ -1973,7 +1977,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const at = groundPoint(player.pos.x + fx * (onFoot ? 1.0 : 0), player.pos.z + fz * (onFoot ? 1.0 : 0));
     const pile = throwSeeds(at.x, at.z, Math.max(0.6, player.pos.y + 0.5));
     act(player, 'CHIRP', 0.6);
-    say(player, '간식이다!', 1.3);
+    say(player, tr('간식이다!', 'Snack time!'), 1.3);
     playCall('chirp', 1, 0.8);
     if (onFoot) {
       player.move = null;
@@ -2008,7 +2012,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     });
     later(600 + len * 1000 + 500, () => {
       heartsAt(player, 3);
-      say(player, pick(['같이 불렀다!', '우리 합창단', '앵무 합창!']), 1.6);
+      say(player, pick(L(['같이 불렀다!', '우리 합창단', '앵무 합창!'], ['We sang together!', 'Our choir', 'Parrot chorus!'])), 1.6);
     });
   }
   function chirp() {
@@ -2195,7 +2199,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       h.sp.scale.setScalar(0.42 * (0.6 + 0.4 * Math.min(1, (1.6 - h.life) * 4)));
     });
   }
-  const PETTED = ['헤헤', '좋아', '더 해줘', '거기거기', '사르르'];
+  const PETTED = L(['헤헤', '좋아', '더 해줘', '거기거기', '사르르'], ['Hehe', 'I like it', 'More please', 'Right there', 'Mmm']);
   /** Your own bird, tapped: it leans into the scratch. */
   function petPlayer() {
     act(player, 'PETTED', 2.4);
@@ -2210,7 +2214,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     if (env.night) return; // sleepy time, not begging time
     if (clock - (player.stillSince ?? clock) > 12 && (player.begCount || 0) < 3 && clock > (player.begAt || 0)) {
       act(player, 'BEG', 3);
-      say(player, '쓰담쓰담 해줘', 2.2);
+      say(player, tr('쓰담쓰담 해줘', 'Pet me?'), 2.2);
       player.begCount = (player.begCount || 0) + 1;
       player.begAt = clock + 40;
       player.stillSince = clock;
@@ -2292,7 +2296,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       if (wet && !a.wet) {
         ripple(a.pos.x, 0.04, a.pos.z, 1.3);
         spray(a, 5);
-        if (a.isPlayer) { say(player, pick(['첨벙!', '물이다!', '시원해']), 1.2); if (!(a.splashAt > clock)) a.splashAt = clock + 1.3; }
+        if (a.isPlayer) { say(player, pick(L(['첨벙!', '물이다!', '시원해'], ['Splash!', 'Water!', 'So cool'])), 1.2); if (!(a.splashAt > clock)) a.splashAt = clock + 1.3; }
       }
       a.wet = wet;
       if (!wet) return;
@@ -2352,7 +2356,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
         const h0 = entering.h;
         entering = null;
         player.scale = 1;
-        flyTo(player, h0.front, 'ground', () => { say(player, h0.card.mine ? '다시 앵파크로!' : '재밌었다!', 1.4); playCall('chirp', 1, 0.7); });
+        flyTo(player, h0.front, 'ground', () => { say(player, h0.card.mine ? tr('다시 앵파크로!', 'Back to the park!') : tr('재밌었다!', 'That was fun!'), 1.4); playCall('chirp', 1, 0.7); });
       }
     }
 
@@ -2408,8 +2412,8 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     stepBeg();
     ticks.forEach((f) => f(clock, dt));
     if ((steering || player.move) && onGround(player.pos) && clock > rustleAt) {
-      if (Math.hypot(player.pos.x - PZ.x, player.pos.z - PZ.z) < PZ.r) { say(player, '사각사각', 1.1); rustleAt = clock + 5; }
-      else if (Math.hypot(player.pos.x - CZ.x, player.pos.z - CZ.z) < CZ.r) { say(player, pick(['꽃향기~', '코스모스다']), 1.3); rustleAt = clock + 6; }
+      if (Math.hypot(player.pos.x - PZ.x, player.pos.z - PZ.z) < PZ.r) { say(player, tr('사각사각', 'Rustle rustle'), 1.1); rustleAt = clock + 5; }
+      else if (Math.hypot(player.pos.x - CZ.x, player.pos.z - CZ.z) < CZ.r) { say(player, pick(L(['꽃향기~', '코스모스다'], ['Smells nice~', 'Cosmos!'])), 1.3); rustleAt = clock + 6; }
     }
 
     // leaf piles burst when someone runs through
@@ -2420,7 +2424,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       if (!who) return;
       p.cool = clock + 2.2;
       leafBurst(p.x, p.z);
-      if (who.isPlayer) say(player, '바스락!', 1.2);
+      if (who.isPlayer) say(player, tr('바스락!', 'Crunch!'), 1.2);
     });
 
     // falling leaves around the view
@@ -2563,7 +2567,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       // the ride ends on time, when the mount leaves, or when I steer my own bird off
       if (clock > a.riding.until || !actors.includes(t) || !t.b.group.visible || (a.isPlayer && steering)) {
         stopRide(a);
-        if (local(a) && !(a.isPlayer && steering)) { const s = besides(t); flyTo(a, s.p, s.surface, () => say(a, '착지!', 1)); }
+        if (local(a) && !(a.isPlayer && steering)) { const s = besides(t); flyTo(a, s.p, s.surface, () => say(a, tr('착지!', 'Landed!'), 1)); }
         return;
       }
       a.pos.copy(headTop(t));
@@ -2597,15 +2601,15 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     } else {
       act(a, 'PREEN', 1.1); act(t, 'PETTED', 1.1);
       say(a, P.me[0], 1.1); soon(0.4, () => say(t, P.them[0], 0.8));
-      soon(1.15, () => { act(a, 'POKE', 0.45); say(a, '콕!', 1); });
-      soon(1.3, () => { act(t, 'BONKED', 1.1); say(t, '...아야!', 1.4); feathersOff(t); playCall('call', t.pitch ?? 1, loudness(t)); });
+      soon(1.15, () => { act(a, 'POKE', 0.45); say(a, tr('콕!', 'Poke!'), 1); });
+      soon(1.3, () => { act(t, 'BONKED', 1.1); say(t, tr('...아야!', '...Ouch!'), 1.4); feathersOff(t); playCall('call', t.pitch ?? 1, loudness(t)); });
     }
   }
   /** x answers the prank y played on it: 0 back, 1 make up, 2 ignore and fly off. */
   function playAnswer(x, y, ans) {
     if (ans === 0) {
       playPrank(x, y, 0);
-      soon(0.3, () => { dust(x, y); say(x, '투닥투닥!', 1.2); });
+      soon(0.3, () => { dust(x, y); say(x, tr('투닥투닥!', 'Squabble!'), 1.2); });
     } else if (ans === 1) {
       faceEachOther(x, y);
       if (local(y)) y.rotTarget = angleTo(y.pos, x.pos);
@@ -2614,13 +2618,13 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       say(x, l1, 1.4); soon(0.6, () => say(y, l2, 1.2));
       soon(0.3, () => hearts(x.pos.clone().lerp(y.pos, 0.5)));
     } else {
-      act(x, 'GRUMPY', 0.8); say(x, '흥!', 1.2);
+      act(x, 'GRUMPY', 0.8); say(x, tr('흥!', 'Hmph!'), 1.2);
       soon(0.5, () => {
         if (!local(x)) return;
         const dx = x.pos.x - y.pos.x, dz = x.pos.z - y.pos.z, d = Math.hypot(dx, dz) || 1;
         flyTo(x, groundPoint(x.pos.x + (dx / d) * 6, x.pos.z + (dz / d) * 6), 'ground', null);
       });
-      soon(0.9, () => say(y, pick(['...', '삐졌나?', '같이 놀자~']), 1.2));
+      soon(0.9, () => say(y, pick(L(['...', '삐졌나?', '같이 놀자~'], ['...', 'Upset?', 'Let\'s play~'])), 1.2));
     }
   }
   const whoOf = (a) => (a.remote ? { id: a.remote.pid, name: a.name, remote: true } : { id: a.rid, name: a.name, remote: false });
@@ -2657,7 +2661,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       landing = false;
       player.surface = 'air';
       cruise = Math.max(player.pos.y + 2.2, CRUISE);
-      say(player, '훨훨', 0.9);
+      say(player, tr('훨훨', 'Flap flap'), 0.9);
       return true;
     },
     /** Hold to go up (1) or down (-1) while flying; 0 to stop. */
@@ -2832,7 +2836,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       player.name = v.name;
       player.tagEl.textContent = v.name;
       hearts(player.pos.clone());
-      say(player, `${v.name} 차례!`, 1.6);
+      say(player, tr(`${v.name} 차례!`, `${v.name}'s turn!`), 1.6);
       playCall('chirp', 1.1, 0.8);
     },
     /**
@@ -2852,7 +2856,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       player.rotTarget = player.b.group.rotation.y = spot.ry || 0;
       cam.yaw = cam.yawT = yawBehind(player.b.group.rotation.y);
       stepCamera(0, true);
-      say(player, '다시 왔어!', 1.6);
+      say(player, tr('다시 왔어!', 'I\'m back!'), 1.6);
       playCall('chirp', 1, 0.8);
       return true;
     },

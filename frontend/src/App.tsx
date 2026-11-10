@@ -8,6 +8,8 @@ import { ParrotEditPage, ParrotNewPage } from './pages/ParrotEdit';
 import { PostDetailPage } from './pages/PostDetail';
 import { WritePage } from './pages/Write';
 import { useSession } from './session';
+import { LangSwitch } from './components/LangSwitch';
+import { tr } from './i18n';
 
 // The 3D room pulls in three.js, so it loads only when someone opens a room.
 const RoomPage = lazy(() => import('./pages/Room').then((m) => ({ default: m.RoomPage })));
@@ -17,7 +19,7 @@ const AdminPage = lazy(() => import('./pages/Admin').then((m) => ({ default: m.A
 
 function RequireLogin({ children }: { children: ReactNode }) {
   const { me, loading } = useSession();
-  if (loading) return <div className="center">불러오는 중</div>;
+  if (loading) return <div className="center">{tr('불러오는 중', 'Loading')}</div>;
   return me ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
@@ -34,18 +36,19 @@ export function App() {
   if (pathname.startsWith('/park')) {
     return (
       <div className="app game">
-        <Suspense fallback={<div className="center">앵파크 가는 중</div>}><ParkPage /></Suspense>
+        <Suspense fallback={<div className="center">{tr('앵파크 가는 중', 'Heading to the park')}</div>}><ParkPage /></Suspense>
       </div>
     );
   }
   return (
     <div className={pathname.startsWith('/admin') ? 'app wide' : 'app'}>
       <header className="topbar">
-        <Link to="/feed" className="logo"><img src="/icon.svg" alt="" />앵로그</Link>
+        <Link to="/feed" className="logo"><img src="/icon.svg" alt="" />{tr('앵로그', 'Anglog')}</Link>
         <div className="row" style={{ alignItems: 'center' }}>
-          {isMock && <span className="mock-badge">가짜 서버</span>}
-          {me?.admin && <Link className="btn small" to="/admin">관리</Link>}
-          {!loading && !me && <Link className="btn small" to="/login">로그인</Link>}
+          <LangSwitch />
+          {isMock && <span className="mock-badge">{tr('가짜 서버', 'Mock')}</span>}
+          {me?.admin && <Link className="btn small" to="/admin">{tr('관리', 'Admin')}</Link>}
+          {!loading && !me && <Link className="btn small" to="/login">{tr('로그인', 'Log in')}</Link>}
         </div>
       </header>
 
@@ -57,23 +60,23 @@ export function App() {
           <Route path="/write" element={<RequireLogin><WritePage /></RequireLogin>} />
           <Route path="/post/:id" element={<PostDetailPage />} />
           <Route path="/visit" element={<VisitRedirect />} />
-          <Route path="/play/:handle" element={<Suspense fallback={<div className="center">방에 들어가는 중</div>}><PlayPage /></Suspense>} />
-          <Route path="/room/:handle" element={<Suspense fallback={<div className="center">방에 들어가는 중</div>}><RoomPage /></Suspense>} />
-          <Route path="/admin" element={<Suspense fallback={<div className="center">불러오는 중</div>}><AdminPage /></Suspense>} />
+          <Route path="/play/:handle" element={<Suspense fallback={<div className="center">{tr('방에 들어가는 중', 'Entering the room')}</div>}><PlayPage /></Suspense>} />
+          <Route path="/room/:handle" element={<Suspense fallback={<div className="center">{tr('방에 들어가는 중', 'Entering the room')}</div>}><RoomPage /></Suspense>} />
+          <Route path="/admin" element={<Suspense fallback={<div className="center">{tr('불러오는 중', 'Loading')}</div>}><AdminPage /></Suspense>} />
           <Route path="/parrots/new" element={<RequireLogin><ParrotNewPage /></RequireLogin>} />
           <Route path="/parrots/:id/edit" element={<RequireLogin><ParrotEditPage /></RequireLogin>} />
-          <Route path="*" element={<div className="page"><p className="empty">없는 페이지예요.</p></div>} />
+          <Route path="*" element={<div className="page"><p className="empty">{tr('없는 페이지예요.', 'This page does not exist.')}</p></div>} />
         </Routes>
       </main>
 
-      <nav className="bottomnav" aria-label="주 메뉴">
+      <nav className="bottomnav" aria-label={tr('주 메뉴', 'Main menu')}>
         <div className="bottomnav-inner">
-          <NavLink to="/feed" end className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}><HomeIcon />홈</NavLink>
-          <NavLink to="/park" className="navlink"><VisitIcon />앵파크</NavLink>
-          <NavLink to="/write" className={({ isActive }) => `navlink write${isActive ? ' active' : ''}`} aria-label="일기 쓰기">
+          <NavLink to="/feed" end className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}><HomeIcon />{tr('홈', 'Home')}</NavLink>
+          <NavLink to="/park" className="navlink"><VisitIcon />{tr('앵파크', 'Park')}</NavLink>
+          <NavLink to="/write" className={({ isActive }) => `navlink write${isActive ? ' active' : ''}`} aria-label={tr('일기 쓰기', 'Write a diary')}>
             <span className="plus"><PlusIcon /></span>
           </NavLink>
-          <NavLink to={me ? `/room/${me.handle}` : '/login'} className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}><RoomIcon />내 방</NavLink>
+          <NavLink to={me ? `/room/${me.handle}` : '/login'} className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}><RoomIcon />{tr('내 방', 'My room')}</NavLink>
         </div>
       </nav>
     </div>

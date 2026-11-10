@@ -5,6 +5,10 @@ import * as THREE from 'three';
 import { playCall, playFx } from '../lib/sound';
 import { makeBird } from './bird.js';
 import { buildRoomScene, D, disposeScene, featherMesh, PERCH, W } from './scene.js';
+import { tr } from '../i18n';
+
+/** Lines in both languages: L(['안녕'], ['Hi']). pick() takes the current language's list. */
+const L = (ko, en) => ({ ko, en });
 
 const clamp = THREE.MathUtils.clamp;
 const FLOOR = { x0: 0.6, x1: W - 0.6, z0: 1.4, z1: D - 0.5 };
@@ -12,18 +16,18 @@ const OBSTACLES = [
   { x: W - 1.2, z: 1.2, r: 0.4 },
   { x: W - 0.8, z: D - 1.2, r: 0.55 },
 ];
-const CHIRPS = ['짹짹!', '짹!', '삐요', '짹짹짹'];
-const REPLIES = ['짹!', '삐약', '누구야?', '반가워!', '짹짹'];
-const PLAY_LINES = ['신난다!', '한 번 더!', '짹짹짹!', '같이 춤추자'];
-const PREEN_LINES = ['시원해~', '거기 거기', '콕콕', '고마워'];
-const HELLO = ['왔어?', '놀러왔구나!', '짹! 반가워', '여기야 여기'];
+const CHIRPS = L(['짹짹!', '짹!', '삐요', '짹짹짹'], ['Tweet!', 'Chirp!', 'Peep', 'Tweet tweet']);
+const REPLIES = L(['짹!', '삐약', '누구야?', '반가워!', '짹짹'], ['Chirp!', 'Peep', 'Who\'s that?', 'Hi there!', 'Tweet']);
+const PLAY_LINES = L(['신난다!', '한 번 더!', '짹짹짹!', '같이 춤추자'], ['Yay!', 'Again!', 'Tweet tweet!', 'Let\'s dance']);
+const PREEN_LINES = L(['시원해~', '거기 거기', '콕콕', '고마워'], ['Ahh~', 'Right there', 'Peck peck', 'Thanks']);
+const HELLO = L(['왔어?', '놀러왔구나!', '짹! 반가워', '여기야 여기'], ['You\'re here?', 'Came to play!', 'Chirp! Hi', 'Over here']);
 
 const angleTo = (from, to) => Math.atan2(-(to.z - from.z), to.x - from.x);
 function lerpAngle(a, b, k) {
   const d = ((((b - a + Math.PI) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) - Math.PI;
   return a + d * k;
 }
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const pick = (a) => { const arr = Array.isArray(a) ? a : tr(a.ko, a.en); return arr[Math.floor(Math.random() * arr.length)]; };
 const onFloor = (p) => p.y < 0.05;
 function floorPoint(x, z) {
   const p = new THREE.Vector3(clamp(x, FLOOR.x0, FLOOR.x1), 0, clamp(z, FLOOR.z0, FLOOR.z1));
@@ -178,7 +182,7 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
         ball.position.z = a.pos.z + (dz / d) * 0.62;
         const sp = Math.max(ballVel.length(), a.move ? 3.2 : 0.8);
         ballVel.set((dx / d) * sp, 0, (dz / d) * sp);
-        if (a.isPlayer && a.move && Math.random() < 0.4) say(a, '데굴데굴', 0.8);
+        if (a.isPlayer && a.move && Math.random() < 0.4) say(a, tr('데굴데굴', 'Roll roll'), 0.8);
       }
     });
     ball.position.addScaledVector(ballVel, dt);
@@ -240,14 +244,14 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
     bell.swingX += bell.velX * dt;
     bell.pivot.rotation.set(bell.swingX, 0, bell.swing);
   }
-  const MIRROR_LINES = ['누구야?', '거울 속에 나다', '안녕 나야!', '너 귀엽다'];
+  const MIRROR_LINES = L(['누구야?', '거울 속에 나다', '안녕 나야!', '너 귀엽다'], ['Who\'s that?', 'It\'s me in there', 'Hi, me!', 'You\'re cute']);
   /** Play with a toy once you are at it. */
   function playToy(a, toy) {
     if (toy === 'bell') {
       a.rotTarget = 0;
       act(a, 'PECK', 1.4);
       ring(3);
-      say(a, '딸랑딸랑', 1.4);
+      say(a, tr('딸랑딸랑', 'Jingle jingle'), 1.4);
     } else if (toy === 'mirror' && toys.mirror) {
       a.rotTarget = angleTo(a.pos, toys.mirror.face);
       act(a, 'SING', 3);
@@ -407,7 +411,7 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
     let target, surface = 'floor';
     const hit = ray.intersectObjects(landables, false)[0];
     let toy = null;
-    if (hit) { const L = hit.object.userData.land(hit.point); target = L.p; surface = L.surface; toy = L.toy || null; }
+    if (hit) { const got = hit.object.userData.land(hit.point); target = got.p; surface = got.surface; toy = got.toy || null; }
     else {
       const p = new THREE.Vector3();
       if (!ray.ray.intersectPlane(floorPlane, p)) return;
@@ -432,7 +436,7 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
     e.style.transform = `translate(${((v.x * 0.5 + 0.5) * w).toFixed(1)}px, ${((-v.y * 0.5 + 0.5) * h).toFixed(1)}px) translate(-50%, -100%)`;
   }
   // entrance: fly in through the open side of the room
-  flyTo(player, floorPoint(6.8, 5.8), 'floor', () => { say(player, '놀러왔어요!', 1.8); playCall('chirp', 1, 0.8); });
+  flyTo(player, floorPoint(6.8, 5.8), 'floor', () => { say(player, tr('놀러왔어요!', 'Came to play!'), 1.8); playCall('chirp', 1, 0.8); });
 
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let last = performance.now();
@@ -480,7 +484,7 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
         if (hh.pos.distanceTo(player.pos) > 7) return;
         setTimeout(() => {
           act(hh, 'CHIRP', 0.7);
-          if (mood === 'GRUMPY') { say(hh, '꽥!'); playCall('screech', hh.pitch, loudness(hh)); }
+          if (mood === 'GRUMPY') { say(hh, tr('꽥!', 'Squawk!')); playCall('screech', hh.pitch, loudness(hh)); }
           else { say(hh, pick(REPLIES)); playCall('chirp', hh.pitch, loudness(hh)); }
           if (!hh.move) hh.rotTarget = angleTo(hh.pos, player.pos);
         }, 400 + Math.random() * 600);
@@ -524,7 +528,7 @@ export function mountPlay(container, room, { visitor, onFrameTap } = {}) {
       scene.add(m);
       falling.push({ m, t: 0, y0: p.y + 0.8, x0: fp.x });
       act(player, 'CHIRP', 0.6);
-      say(player, '깃털 놓고 갈게!', 1.8);
+      say(player, tr('깃털 놓고 갈게!', 'Leaving a feather!'), 1.8);
       playCall('chirp', 1, 0.8);
     },
     dispose() {
