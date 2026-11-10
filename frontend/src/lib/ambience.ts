@@ -1,27 +1,27 @@
 // 앵파크 배경음: 파일 없이 Web Audio로 그 자리에서 만든다.
-// 아주 옅은 나뭇잎 바람과 멀리 작은 새소리 위에, 밝은 패드 화음과 오르골 같은 멜로디가 띄엄띄엄 흐른다.
-// (처음 버전의 낮은 바람은 크게 부풀었다 가라앉아 파도처럼 들려서 뺐다)
-// 멜로디는 화음 안의 음과 F장조 5음 음계에서 그때그때 골라서 들을 때마다 조금씩 다르다.
+// 화창한 낮 공원 느낌: 마림바가 쿵 짝 쿵 짝 반주하고, 짧은 멜로디가 되풀이되며 조금씩 바뀐다.
+// 아주 작은 셰이커로 걷는 리듬을 주고, 멀리 작은 새가 가끔 지저귄다.
+// 아련하게 들리지 않도록 maj7, add9 같은 화음과 긴 잔향, 느린 패드는 쓰지 않는다.
 // 같은 코드로 미리 듣기 파일도 만든다(OfflineAudioContext에 renderAmbience).
 
-const BPM = 72;
+const BPM = 96;
 const BEAT = 60 / BPM;
 const BAR = BEAT * 4;
-const BARS_PER_CHORD = 2;
 
-// F장조. 음 이름 대신 MIDI 번호(60 = 가운데 도)
-// 밝은 장조 화음 위주: Fadd9, Cadd9, Bbmaj7, Fmaj7, Dm7 한 번, Bbadd9, Fadd9, Csus4
-const CHORDS: { root: number; pad: number[]; tones: number[] }[] = [
-  { root: 41, pad: [57, 60, 65, 67], tones: [72, 76, 77, 79, 81, 84] }, // Fadd9
-  { root: 36, pad: [55, 60, 62, 64], tones: [72, 74, 76, 79, 84, 86] }, // Cadd9
-  { root: 46, pad: [57, 58, 62, 65], tones: [74, 77, 81, 82, 84, 86] }, // Bbmaj7
-  { root: 41, pad: [57, 60, 64, 65], tones: [72, 76, 77, 81, 84, 88] }, // Fmaj7
-  { root: 38, pad: [57, 60, 62, 65], tones: [72, 74, 77, 81, 84, 86] }, // Dm7
-  { root: 46, pad: [58, 60, 62, 65], tones: [74, 77, 79, 82, 84, 86] }, // Bbadd9
-  { root: 41, pad: [57, 60, 65, 67], tones: [72, 76, 77, 79, 84, 88] }, // Fadd9
-  { root: 36, pad: [55, 60, 62, 65], tones: [72, 74, 77, 79, 84, 86] }, // Csus4(다시 F로 돌아가며 풀림)
+// F장조. MIDI 번호(60 = 가운데 도). 한 마디에 화음 하나, 8마디가 한 바퀴
+// F Bb F C | Dm Bb C F: 밝은 으뜸화음으로 자주 돌아온다
+const CHORDS: { root: number; fifth: number; stab: number[]; tones: number[] }[] = [
+  { root: 41, fifth: 48, stab: [60, 65, 69], tones: [72, 77, 81, 84] }, // F
+  { root: 46, fifth: 41, stab: [62, 65, 70], tones: [74, 77, 82, 86] }, // Bb
+  { root: 41, fifth: 48, stab: [60, 65, 69], tones: [72, 77, 81, 84] }, // F
+  { root: 36, fifth: 43, stab: [60, 64, 67], tones: [72, 76, 79, 84] }, // C
+  { root: 38, fifth: 45, stab: [62, 65, 69], tones: [74, 77, 81, 86] }, // Dm
+  { root: 46, fifth: 41, stab: [62, 65, 70], tones: [74, 77, 82, 86] }, // Bb
+  { root: 36, fifth: 43, stab: [60, 64, 67], tones: [72, 76, 79, 84] }, // C
+  { root: 41, fifth: 48, stab: [60, 65, 69], tones: [72, 77, 81, 84] }, // F
 ];
-const PENTA = [72, 74, 77, 79, 81, 84, 86, 88]; // C D F G A C D E, 5음 음계를 한 옥타브 위로
+// F장조 음계, 멜로디 음역(C5 ~ F6)
+const SCALE = [72, 74, 76, 77, 79, 81, 82, 84, 86, 88, 89];
 
 const hz = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -50,102 +50,117 @@ function makeImpulse(ctx: BaseAudioContext, seconds: number, rand: () => number)
   const buf = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const d = buf.getChannelData(ch);
-    for (let i = 0; i < len; i++) {
-      const t = i / len;
-      // 앞부분은 조금 비우고(먼 숲의 울림), 뒤로 갈수록 부드럽게 사라진다
-      d[i] = (rand() * 2 - 1) * Math.pow(1 - t, 2.6) * (i < ctx.sampleRate * 0.02 ? i / (ctx.sampleRate * 0.02) : 1);
-    }
+    for (let i = 0; i < len; i++) d[i] = (rand() * 2 - 1) * Math.pow(1 - i / len, 4);
   }
   return buf;
 }
 
 function makeNoise(ctx: BaseAudioContext, seconds: number, rand: () => number) {
-  // 갈색 잡음(낮은 쪽이 두꺼운 바람 소리)
   const len = Math.floor(ctx.sampleRate * seconds);
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
   const d = buf.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < len; i++) {
-    last = (last + 0.02 * (rand() * 2 - 1)) / 1.02;
-    d[i] = last * 3.5;
-  }
+  for (let i = 0; i < len; i++) d[i] = rand() * 2 - 1;
   return buf;
 }
 
 function build(ctx: BaseAudioContext, out: AudioNode, rand: () => number): Graph {
   const master = ctx.createGain();
   master.gain.value = 0;
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -22;
-  comp.ratio.value = 3;
-  comp.attack.value = 0.05;
-  comp.release.value = 0.6;
   // 휴대폰 스피커에서 웅웅거리지 않게 아주 낮은 소리는 걷어 낸다
   const hp = ctx.createBiquadFilter();
   hp.type = 'highpass';
-  hp.frequency.value = 90;
+  hp.frequency.value = 80;
   hp.Q.value = 0.5;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -20;
+  comp.ratio.value = 3;
+  comp.attack.value = 0.01;
+  comp.release.value = 0.25;
   master.connect(hp).connect(comp).connect(out);
 
+  // 짧은 잔향: 야외 공원이라 멀리 퍼지지 않고 살짝만 울린다
   const conv = ctx.createConvolver();
-  conv.buffer = makeImpulse(ctx, 4.5, rand);
+  conv.buffer = makeImpulse(ctx, 1.2, rand);
   const reverb = ctx.createGain();
-  reverb.gain.value = 1;
   const wet = ctx.createGain();
-  wet.gain.value = 0.55;
+  wet.gain.value = 0.22;
   reverb.connect(conv).connect(wet).connect(master);
 
   const music = ctx.createGain();
   music.gain.value = 0.9;
   music.connect(master);
   const nature = ctx.createGain();
-  nature.gain.value = 0.55;
+  nature.gain.value = 0.6;
   nature.connect(master);
-  return { ctx, master, music, nature, reverb, noise: makeNoise(ctx, 8, rand) };
+  return { ctx, master, music, nature, reverb, noise: makeNoise(ctx, 2, rand) };
 }
 
-/** Wind and a little stream, looping forever with slow swells. */
-function startNature(g: Graph, t0: number, rand: () => number, until: number | null) {
+/** Wooden mallet on a bar: bright knock, quick fall. Used for the melody and the chords. */
+function marimba(g: Graph, t: number, midi: number, vel: number, pan: number, len = 0.9, send = 0.35) {
   const { ctx } = g;
-  const loop = (filterType: BiquadFilterType, freq: number, q: number, gain: number, lfoRate: number, lfoDepth: number, pan: number) => {
-    const src = ctx.createBufferSource();
-    src.buffer = g.noise;
-    src.loop = true;
-    src.loopStart = rand() * 2;
-    const f = ctx.createBiquadFilter();
-    f.type = filterType;
-    f.frequency.value = freq;
-    f.Q.value = q;
-    const amp = ctx.createGain();
-    amp.gain.value = gain;
-    // 느리게 부풀었다 가라앉는 바람
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = lfoRate;
-    const depth = ctx.createGain();
-    depth.gain.value = gain * lfoDepth;
-    lfo.connect(depth).connect(amp.gain);
-    const cut = ctx.createGain();
-    cut.gain.value = freq * 0.35;
-    lfo.connect(cut).connect(f.frequency);
-    const p = ctx.createStereoPanner();
-    p.pan.value = pan;
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = Math.min(freq * 0.4, 260);
-    src.connect(hp).connect(f).connect(amp).connect(p).connect(g.nature);
-    src.start(t0, rand() * 6);
-    lfo.start(t0);
-    if (until != null) {
-      src.stop(until);
-      lfo.stop(until);
-    }
-    return [src, lfo];
-  };
-  // 나뭇잎 사이 바람만 아주 옅게. 부풂을 작게 해서 파도처럼 들리지 않게
-  return [
-    ...loop('bandpass', 2200, 0.7, 0.035, 0.11, 0.25, 0.3),
-    ...loop('bandpass', 4200, 0.9, 0.018, 0.17, 0.25, -0.35),
-  ];
+  const f = hz(midi);
+  const amp = ctx.createGain();
+  amp.gain.setValueAtTime(0.0001, t);
+  amp.gain.linearRampToValueAtTime(vel, t + 0.004);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  const p = ctx.createStereoPanner();
+  p.pan.value = pan;
+  amp.connect(p);
+  p.connect(g.music);
+  if (send > 0) {
+    const s = ctx.createGain();
+    s.gain.value = send;
+    p.connect(s).connect(g.reverb);
+  }
+  // 기음과, 마림바 소리를 만드는 4배 배음(짧게 반짝)
+  ([[1, 1, 1], [4, 0.28, 0.12], [10, 0.05, 0.04]] as const).forEach(([mul, lv, decay]) => {
+    if (f * mul > 16000) return;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = f * mul;
+    const e = ctx.createGain();
+    e.gain.setValueAtTime(lv, t);
+    e.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.03, len * decay));
+    o.connect(e).connect(amp);
+    o.start(t);
+    o.stop(t + len + 0.02);
+  });
+}
+
+/** A soft round bass note, short like a plucked string. */
+function bass(g: Graph, t: number, midi: number, vel: number) {
+  const { ctx } = g;
+  const o = ctx.createOscillator();
+  o.type = 'triangle';
+  o.frequency.value = hz(midi);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 700;
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.linearRampToValueAtTime(vel, t + 0.01);
+  e.gain.exponentialRampToValueAtTime(vel * 0.4, t + 0.12);
+  e.gain.exponentialRampToValueAtTime(0.0001, t + BEAT * 1.6);
+  o.connect(lp).connect(e).connect(g.music);
+  o.start(t);
+  o.stop(t + BEAT * 1.7);
+}
+
+/** A light shaker tick. */
+function shaker(g: Graph, t: number, vel: number, offset: number) {
+  const { ctx } = g;
+  const src = ctx.createBufferSource();
+  src.buffer = g.noise;
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 7000;
+  const e = ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.linearRampToValueAtTime(vel, t + 0.008);
+  e.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+  src.connect(hp).connect(e).connect(g.music);
+  src.start(t, offset);
+  src.stop(t + 0.08);
 }
 
 /** A far-off little songbird: two to four quick whistles, very quiet, somewhere left or right. */
@@ -154,11 +169,11 @@ function songbird(g: Graph, t: number, rand: () => number) {
   const p = ctx.createStereoPanner();
   p.pan.value = (rand() < 0.5 ? -1 : 1) * (0.4 + rand() * 0.5);
   const lv = ctx.createGain();
-  lv.gain.value = 0.035 + rand() * 0.02;
+  lv.gain.value = 0.04 + rand() * 0.02;
   p.connect(lv);
   lv.connect(g.nature);
   const send = ctx.createGain();
-  send.gain.value = 1.2;
+  send.gain.value = 0.8;
   lv.connect(send).connect(g.reverb);
   const base = 2600 + rand() * 1400;
   const n = 2 + Math.floor(rand() * 3);
@@ -179,144 +194,77 @@ function songbird(g: Graph, t: number, rand: () => number) {
   }
 }
 
-/** One plucked note, like a kalimba or a music box. */
-function pluck(g: Graph, t: number, midi: number, vel: number, pan: number) {
-  const { ctx } = g;
-  const f = hz(midi);
-  const amp = ctx.createGain();
-  const len = 2.2 + (90 - midi) * 0.03;
-  amp.gain.setValueAtTime(0.0001, t);
-  amp.gain.linearRampToValueAtTime(vel, t + 0.008);
-  amp.gain.exponentialRampToValueAtTime(vel * 0.35, t + 0.25);
-  amp.gain.exponentialRampToValueAtTime(0.0001, t + len);
-  const tone = ctx.createBiquadFilter();
-  tone.type = 'lowpass';
-  tone.frequency.setValueAtTime(7000, t);
-  tone.frequency.exponentialRampToValueAtTime(2600, t + 0.6);
-  const p = ctx.createStereoPanner();
-  p.pan.value = pan;
-  amp.connect(tone).connect(p);
-  p.connect(g.music);
-  const send = ctx.createGain();
-  send.gain.value = 0.9;
-  p.connect(send).connect(g.reverb);
-  // 기음, 옥타브, 칼림바 특유의 살짝 어긋난 배음
-  ([[1, 1], [2, 0.3], [3, 0.06], [4.07, 0.08]] as const).forEach(([mul, lv]) => {
-    const o = ctx.createOscillator();
-    o.type = 'sine';
-    o.frequency.value = f * mul;
-    const e = ctx.createGain();
-    e.gain.setValueAtTime(lv, t);
-    e.gain.exponentialRampToValueAtTime(0.0001, t + (mul > 1.5 ? len * 0.35 : len));
-    o.connect(e).connect(amp);
-    o.start(t);
-    o.stop(t + len + 0.05);
-  });
-}
-
-/** A soft pad chord: detuned triangles through a dark filter, slow in and slow out. */
-function pad(g: Graph, t: number, notes: number[], dur: number, level: number) {
-  const { ctx } = g;
-  const amp = ctx.createGain();
-  const attack = Math.min(3, dur * 0.35);
-  amp.gain.setValueAtTime(0.0001, t);
-  amp.gain.linearRampToValueAtTime(level, t + attack);
-  amp.gain.setValueAtTime(level, t + dur - 0.5);
-  amp.gain.linearRampToValueAtTime(0.0001, t + dur + 2.5);
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.setValueAtTime(1300, t);
-  lp.frequency.linearRampToValueAtTime(2100, t + dur * 0.6);
-  lp.frequency.linearRampToValueAtTime(1200, t + dur + 2);
-  lp.Q.value = 0.3;
-  amp.connect(lp);
-  lp.connect(g.music);
-  const send = ctx.createGain();
-  send.gain.value = 0.7;
-  lp.connect(send).connect(g.reverb);
-  notes.forEach((m, i) => {
-    [-3, 3].forEach((cents, k) => {
-      const o = ctx.createOscillator();
-      o.type = 'triangle';
-      o.frequency.value = hz(m);
-      o.detune.value = cents + (i - 1.5) * 1.5;
-      const p = ctx.createStereoPanner();
-      p.pan.value = (k ? 0.35 : -0.35) * (i % 2 ? 1 : 0.6);
-      const v = ctx.createGain();
-      v.gain.value = 0.25 / notes.length;
-      o.connect(v).connect(p).connect(amp);
-      o.start(t);
-      o.stop(t + dur + 3);
-    });
-  });
-}
-
-/** A low, round bass note at each chord change. */
-function bass(g: Graph, t: number, midi: number, level: number) {
-  const { ctx } = g;
-  const o = ctx.createOscillator();
-  o.type = 'sine';
-  o.frequency.value = hz(midi);
-  const e = ctx.createGain();
-  e.gain.setValueAtTime(0.0001, t);
-  e.gain.linearRampToValueAtTime(level, t + 0.25);
-  e.gain.exponentialRampToValueAtTime(0.0001, t + BAR * BARS_PER_CHORD + 1);
-  o.connect(e).connect(g.music);
-  o.start(t);
-  o.stop(t + BAR * BARS_PER_CHORD + 1.2);
-}
-
 /**
  * Writes the music bar by bar. scheduleUntil(time) fills in everything up to that time, so the live
  * player can call it a little ahead of the clock and the preview renderer can call it once.
+ *
+ * The melody is made of 2-bar ideas: a rhythm is picked once and played twice (question, answer)
+ * with the notes following the chords, so it sounds like a little tune rather than random notes.
  */
 function composer(g: Graph, t0: number, rand: () => number) {
   let bar = 0;
   let next = t0;
-  let lastNote = 79;
-  let nextBird = t0 + 4 + rand() * 6;
-  // 몇 마디는 멜로디를 쉬고 화음만 둔다(숨 쉬는 자리)
-  let restUntil = 2;
+  let nextBird = t0 + 5 + rand() * 6;
+  let rhythm: number[] = [];
+  let last = 77;
 
-  const melodyBar = (t: number, chord: (typeof CHORDS)[number], busy: number) => {
-    // 8분음표 칸에 확률로 음을 놓는다. 앞 음과 가까운 음을 더 자주 골라서 노래처럼 이어지게
-    for (let step = 0; step < 8; step++) {
+  // 두 마디(8분음표 16칸) 중 어디서 칠지. 강박에 많이, 끝은 비워 숨 쉴 자리를 둔다
+  const newRhythm = () => {
+    const r: number[] = [];
+    for (let step = 0; step < 16; step++) {
+      const strong = step % 4 === 0;
       const onBeat = step % 2 === 0;
-      if (rand() > (onBeat ? 0.42 : 0.16) * busy) continue;
-      const pool = rand() < 0.6 ? chord.tones : PENTA;
-      const near = pool.filter((m) => Math.abs(m - lastNote) <= 5);
-      const list = near.length && rand() < 0.75 ? near : pool;
-      const m = list[Math.floor(rand() * list.length)];
-      lastNote = m;
-      const swing = onBeat ? 0 : BEAT * 0.08;
-      const at = t + step * (BEAT / 2) + swing + (rand() - 0.5) * 0.02;
-      pluck(g, at, m, 0.42 + rand() * 0.16, (rand() - 0.5) * 0.7);
-      // 가끔 아래 4도나 5도로 살짝 겹친다
-      if (rand() < 0.12) pluck(g, at + 0.03, m - (rand() < 0.5 ? 5 : 7), 0.16, (rand() - 0.5) * 0.7);
-      // 아주 가끔 한 옥타브 위에서 반짝
-      if (rand() < 0.05) pluck(g, at + BEAT, m + 12, 0.12, (rand() - 0.5) * 0.9);
+      const p = step >= 14 ? 0.1 : strong ? 0.85 : onBeat ? 0.55 : 0.3;
+      if (rand() < p) r.push(step);
     }
+    return r.length >= 4 ? r : [0, 2, 4, 8, 10];
+  };
+
+  const noteFor = (step: number, chord: (typeof CHORDS)[number]) => {
+    // 강박은 화음 음, 사이는 음계에서 한두 칸 움직인다
+    if (step % 4 === 0) {
+      const near = [...chord.tones].sort((a, b) => Math.abs(a - last) - Math.abs(b - last));
+      return near[rand() < 0.7 ? 0 : 1];
+    }
+    const i = SCALE.indexOf(last);
+    const from = i < 0 ? Math.max(0, SCALE.findIndex((m) => m >= last)) : i;
+    const move = rand() < 0.5 ? 1 : -1;
+    const j = Math.max(0, Math.min(SCALE.length - 1, from + move * (rand() < 0.75 ? 1 : 2)));
+    return SCALE[j];
   };
 
   return {
     scheduleUntil(time: number) {
       while (next < time) {
-        const chordIndex = Math.floor(bar / BARS_PER_CHORD) % CHORDS.length;
-        const chord = CHORDS[chordIndex];
-        if (bar % BARS_PER_CHORD === 0) {
-          pad(g, next, chord.pad, BAR * BARS_PER_CHORD, 0.2);
-          bass(g, next, chord.root + 12, 0.05);
+        const chord = CHORDS[bar % CHORDS.length];
+        const phraseBar = bar % 16;
+
+        // 쿵(베이스) 짝(화음) 쿵 짝
+        bass(g, next, chord.root + 12, 0.15);
+        bass(g, next + BEAT * 2, chord.fifth + 12, 0.11);
+        [1, 3].forEach((b) => {
+          chord.stab.forEach((m, k) => marimba(g, next + BEAT * b + k * 0.006, m, 0.075, (k - 1) * 0.35, 0.28, 0.15));
+        });
+        // 셰이커: 8분음표, 뒷박을 살짝 세게
+        for (let s = 0; s < 8; s++) shaker(g, next + s * (BEAT / 2), s % 2 ? 0.05 : 0.025, rand() * 1.5);
+
+        // 멜로디: 처음 두 마디는 반주만, 16마디마다 마지막 2마디도 반주만(쉬는 자리)
+        if (bar >= 2 && phraseBar < 14) {
+          // 4마디마다 새 리듬을 정하고, 2마디 묶음 두 개(물음, 대답)에 같이 쓴다
+          if (bar % 4 === 2 || rhythm.length === 0) rhythm = newRhythm();
+          const half = (bar % 2) * 8;
+          rhythm.filter((s) => s >= half && s < half + 8).forEach((s) => {
+            const at = next + (s - half) * (BEAT / 2);
+            const m = noteFor(s, chord);
+            last = m;
+            marimba(g, at, m, 0.24 + rand() * 0.06, (rand() - 0.5) * 0.4, 0.9, 0.35);
+          });
         }
-        // 한 바퀴(16마디)마다 멜로디 밀도가 천천히 오르내린다
-        const busy = 0.7 + 0.3 * Math.sin((bar / 16) * Math.PI);
-        if (bar >= restUntil) {
-          melodyBar(next, chord, busy);
-          if (bar % 16 === 15 && rand() < 0.6) restUntil = bar + 1 + Math.floor(rand() * 3);
-        }
+
         // 멀리 작은 새가 가끔
         while (nextBird < next + BAR) {
           songbird(g, nextBird, rand);
-          nextBird += 7 + rand() * 12;
+          nextBird += 8 + rand() * 12;
         }
         bar++;
         next += BAR;
@@ -331,7 +279,6 @@ let live: {
   ctx: AudioContext;
   g: Graph;
   timer: number;
-  sources: AudioScheduledSourceNode[];
   onVisible: () => void;
 } | null = null;
 
@@ -354,7 +301,7 @@ export function setMusicOn(on: boolean) {
 }
 
 /** Starts the park's background sound (call from a tap or key press: browsers block sound before that). */
-export function startAmbience(volume = 0.32) {
+export function startAmbience(volume = 0.26) {
   if (live) {
     if (live.ctx.state === 'suspended') void live.ctx.resume();
     return;
@@ -367,11 +314,10 @@ export function startAmbience(volume = 0.32) {
     const g = build(ctx, ctx.destination, rand);
     const t0 = ctx.currentTime + 0.1;
     g.master.gain.setValueAtTime(0.0001, t0);
-    g.master.gain.linearRampToValueAtTime(volume, t0 + 5);
-    const sources = startNature(g, t0, rand, null) as AudioScheduledSourceNode[];
-    const c = composer(g, t0 + 1.5, rand);
-    c.scheduleUntil(ctx.currentTime + 3);
-    const timer = window.setInterval(() => c.scheduleUntil(ctx.currentTime + 3), 500);
+    g.master.gain.linearRampToValueAtTime(volume, t0 + 4);
+    const c = composer(g, t0 + 0.5, rand);
+    c.scheduleUntil(ctx.currentTime + 2);
+    const timer = window.setInterval(() => c.scheduleUntil(ctx.currentTime + 2), 400);
     // 다른 탭에 가 있으면 멈춰서 배터리를 아낀다
     const onVisible = () => {
       if (!live) return;
@@ -379,7 +325,7 @@ export function startAmbience(volume = 0.32) {
       else void live.ctx.resume();
     };
     document.addEventListener('visibilitychange', onVisible);
-    live = { ctx, g, timer, sources, onVisible };
+    live = { ctx, g, timer, onVisible };
     if (ctx.state === 'suspended') void ctx.resume();
   } catch {
     live = null;
@@ -397,8 +343,8 @@ export function stopAmbience() {
     const t = ctx.currentTime;
     g.master.gain.cancelScheduledValues(t);
     g.master.gain.setValueAtTime(g.master.gain.value, t);
-    g.master.gain.linearRampToValueAtTime(0.0001, t + 1.2);
-    window.setTimeout(() => void ctx.close().catch(() => undefined), 1500);
+    g.master.gain.linearRampToValueAtTime(0.0001, t + 1);
+    window.setTimeout(() => void ctx.close().catch(() => undefined), 1300);
   } catch {
     // already gone
   }
@@ -409,9 +355,8 @@ export function renderAmbience(ctx: OfflineAudioContext, seconds: number, seed =
   const rand = rng(seed);
   const g = build(ctx, ctx.destination, rand);
   g.master.gain.setValueAtTime(0.0001, 0);
-  g.master.gain.linearRampToValueAtTime(volume, 4);
-  g.master.gain.setValueAtTime(volume, seconds - 4);
+  g.master.gain.linearRampToValueAtTime(volume, 3);
+  g.master.gain.setValueAtTime(volume, seconds - 3);
   g.master.gain.linearRampToValueAtTime(0.0001, seconds);
-  startNature(g, 0, rand, seconds);
-  composer(g, 1.5, rand).scheduleUntil(seconds - 5);
+  composer(g, 0.5, rand).scheduleUntil(seconds - 2);
 }
