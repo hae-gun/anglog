@@ -10,6 +10,7 @@ import { connectPark, NetClient, NetLook, NetPlayer, NetSpot, NetState, NetStatu
 import { PHRASES, phraseText } from '../lib/phrases';
 import { LangSwitch } from '../components/LangSwitch';
 import { isMuted, setMuted } from '../lib/sound';
+import { musicOn, setMusicOn, startAmbience, stopAmbience } from '../lib/ambience';
 import { mountPark } from '../room3d/park.js';
 import { useSession } from '../session';
 import { isEn, tr } from '../i18n';
@@ -132,6 +133,7 @@ export function ParkPage() {
   const [bird, setBird] = useState<BirdPop | null>(null);
   const [hint, setHint] = useState(true);
   const [muted, setMute] = useState(isMuted());
+  const [music, setMusic] = useState(musicOn());
   const [toast, setToast] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
   const [flying, setFlying] = useState(false);
@@ -156,6 +158,19 @@ export function ParkPage() {
   const netLook: NetLook = { name: visitor.name, species: visitor.species, colors: visitor.colors, home: myBird && me ? me.handle : null };
   const lookRef = useRef(netLook);
   lookRef.current = netLook;
+
+  // 배경음(바람, 개울, 느린 오르골). 브라우저는 누르기 전에는 소리를 막아서 첫 터치나 키 입력에 맞춰 켠다
+  useEffect(() => {
+    if (muted || !music) return undefined;
+    const go = () => startAmbience();
+    go();
+    const events = ['pointerdown', 'keydown', 'touchstart'] as const;
+    events.forEach((e) => window.addEventListener(e, go, { passive: true }));
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, go));
+      stopAmbience();
+    };
+  }, [muted, music]);
 
   useEffect(() => {
     let alive = true;
@@ -399,6 +414,7 @@ export function ParkPage() {
     { get label() { return tr('집 목록', 'Houses'); }, run: () => setSheet('list') },
     { label: view === 'first' ? tr('3인칭으로', 'Third person') : tr('1인칭으로', 'First person'), run: () => { setSheet(null); toggleView(); } },
     { label: muted ? tr('소리 켜기', 'Sound on') : tr('소리 끄기', 'Sound off'), run: () => { setMuted(!muted); setMute(!muted); } },
+    ...(muted ? [] : [{ label: music ? tr('음악 끄기', 'Music off') : tr('음악 켜기', 'Music on'), run: () => { setMusicOn(!music); setMusic(!music); } }]),
   ];
 
   const followed = rooms?.filter((r) => r.following) ?? [];
