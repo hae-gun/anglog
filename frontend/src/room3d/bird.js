@@ -310,40 +310,39 @@ export function makeBird(colors, species) {
   const [hx, hy] = S.head;
   blob(inner, c.body, hx - 0.1, hy - 0.2, 0, 0.24, 0.2, 0.25, 0.3);
 
-  // a knitted scarf (the reward for finishing the first walk with 모란이): a fat ring around the neck,
-  // a stripe, and one end hanging down the chest
-  if (c.scarf) {
-    const scarf = new THREE.Group();
-    scarf.position.set(hx - 0.1, hy - 0.26, 0);
-    scarf.rotation.z = 0.35;
-    inner.add(scarf);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.1, 8, 22), toon(c.scarf));
-    ring.rotation.x = Math.PI / 2;
-    ring.scale.set(1.05, 1.15, 1);
-    scarf.add(ring);
-    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.292, 0.038, 6, 22), toon(shade(c.scarf, 1.35)));
-    stripe.rotation.x = Math.PI / 2;
-    stripe.position.y = 0.05;
-    stripe.scale.set(1.05, 1.15, 1);
-    scarf.add(stripe);
-    // one end down the chest, one fluttering down the back (that is the side the camera mostly sees)
-    [[0.24, -0.14, 0.1, -0.25, 0.28], [-0.44, -0.02, -0.06, 1.15, 0.4], [-0.4, -0.08, 0.08, 0.95, 0.32]].forEach(([x, y, z, rz, len]) => {
-      const end = new THREE.Mesh(new THREE.BoxGeometry(0.075, len, 0.14), toon(c.scarf));
-      end.position.set(x, y, z);
-      end.rotation.z = rz;
-      scarf.add(end);
-      const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.045, 0.144), toon(shade(c.scarf, 1.35)));
-      fringe.position.set(0, -len / 2 + 0.01, 0);
-      end.add(fringe);
-    });
-  }
-
   // head
   const head = new THREE.Group();
   head.position.set(hx, hy, 0);
   head.scale.setScalar(S.headR);
   inner.add(head);
   blob(head, c.body, -0.05, 0.12, 0, 0.33, 0.33, 0.33, 0, LW);
+  // a knitted scarf (the reward for finishing the first walk with 모란이). It hangs from the head group,
+  // snug right under the head, so it sits on the neck and follows the head as it moves
+  if (c.scarf) {
+    const scarf = new THREE.Group();
+    scarf.position.set(-0.04, -0.2, 0);
+    scarf.rotation.z = 0.3;
+    head.add(scarf);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.085, 8, 22), toon(c.scarf));
+    ring.rotation.x = Math.PI / 2;
+    ring.scale.set(1, 1, 0.75);
+    scarf.add(ring);
+    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.257, 0.03, 6, 22), toon(shade(c.scarf, 1.35)));
+    stripe.rotation.x = Math.PI / 2;
+    stripe.scale.set(1, 1, 0.75);
+    stripe.position.y = 0.04;
+    scarf.add(stripe);
+    // a short end in front, two little tails at the back of the neck
+    [[0.2, -0.13, 0.09, -0.2, 0.22], [-0.27, -0.06, -0.05, 0.75, 0.24], [-0.25, -0.1, 0.06, 0.55, 0.2]].forEach(([x, y, z, rz, len]) => {
+      const end = new THREE.Mesh(new THREE.BoxGeometry(0.065, len, 0.12), toon(c.scarf));
+      end.position.set(x, y, z);
+      end.rotation.z = rz;
+      scarf.add(end);
+      const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.04, 0.124), toon(shade(c.scarf, 1.35)));
+      fringe.position.set(0, -len / 2 + 0.01, 0);
+      end.add(fringe);
+    });
+  }
   blob(head, c.face, 0.07, 0.06, 0, 0.32, 0.3, 0.33, 0, LW);
   if (species === 'GREEN_CHEEKED_CONURE') {
     // a dark cap over the crown and the back of the head
