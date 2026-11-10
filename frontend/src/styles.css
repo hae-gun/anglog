@@ -474,3 +474,8 @@ html[lang="en"] .park-plate.lit::after { content: 'New today'; }
 .park-open-box { position: absolute; z-index: 6; left: 50%; bottom: calc(190px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 14px 26px; border: 2px solid var(--ink); border-radius: 999px; background: #F2C94C; box-shadow: 3px 3px 0 var(--ink); font: 19px/1 var(--display); color: var(--ink); animation: box-bob 1s ease-in-out infinite; touch-action: manipulation; }
 @keyframes box-bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -5px); } }
 @media (prefers-reduced-motion: reduce) { .park-open-box { animation: none; } }
+.park-open-box { overflow: hidden; min-width: 168px; }
+.park-open-box.opening { animation: none; background: #FFF3C4; }
+.park-open-label { position: relative; }
+.park-open-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: #F2C94C; transform-origin: left center; animation: open-fill linear forwards; }
+@keyframes open-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }

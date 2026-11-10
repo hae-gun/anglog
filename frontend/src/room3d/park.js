@@ -2733,16 +2733,31 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
   const chests = pep ? pep.chests.map((c) => ({ ...c, away: false, openT: -99, backT: -99 })) : [];
   let chestNear = -1;
   let chestCheckAt = 0;
+  // opening takes a moment (the page shows the progress): the bird stands at the box and pecks at it
+  let chestWork = -1;
+  let chestPeckAt = 0;
   const pops = [];
   function stepChests() {
+    if (chestWork >= 0) {
+      const c = chests[chestWork];
+      if (!c || c.away) chestWork = -1;
+      else if (clock >= chestPeckAt) {
+        chestPeckAt = clock + 0.34;
+        act(player, 'PECK', 0.3);
+        player.rotTarget = angleTo(player.pos, new THREE.Vector3(c.x, 0, c.z));
+      }
+    }
     chests.forEach((c, i) => {
+      // the box being opened jiggles and its lid lifts a little
+      const shake = i === chestWork ? 1 : 0;
+      c.group.rotation.z = shake * Math.sin(clock * 28) * 0.06;
       if (c.away) {
         const k = clock - c.openT;
         c.lid.rotation.x = -Math.min(1, k * 4) * 1.9;
         c.group.scale.setScalar(k < 1.3 ? 1 : Math.max(0.001, 1 - (k - 1.3) * 3));
         c.star.visible = false;
       } else {
-        c.lid.rotation.x = 0;
+        c.lid.rotation.x = shake * (-0.15 - Math.abs(Math.sin(clock * 9)) * 0.12);
         const k = clock - c.backT;
         // pops back in with a little bounce
         c.group.scale.setScalar(k >= 0.5 ? 1 : Math.max(0.001, Math.sin(Math.min(1, k * 2) * Math.PI * 0.75) / Math.sin(Math.PI * 0.75)));
@@ -2933,6 +2948,22 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
       heartsAt(player, 3);
       playCall('chirp', 1.15, 0.9);
       say(player, pick(L(['빼빼로 찾았다!', '하나 더!', '냄새만 맡을게', '반짝반짝!'], ['Found a Pepero!', 'One more!', 'Just a sniff', 'Shiny!'])), 1.4);
+    },
+    /** Start opening box i: step up to it and peck away until chestStop (the page times it). */
+    chestWork(i) {
+      const c = chests[i];
+      if (!c || c.away) return false;
+      const dx = player.pos.x - c.x, dz = player.pos.z - c.z, d = Math.hypot(dx, dz) || 1;
+      player.move = null;
+      player.pos.copy(groundPoint(c.x + (dx / d) * 0.75, c.z + (dz / d) * 0.75));
+      player.surface = 'ground';
+      player.rotTarget = angleTo(player.pos, new THREE.Vector3(c.x, 0, c.z));
+      chestWork = i;
+      chestPeckAt = 0;
+      return true;
+    },
+    chestStop() {
+      chestWork = -1;
     },
     /** Box i is back (ten seconds later). */
     chestBack(i) {

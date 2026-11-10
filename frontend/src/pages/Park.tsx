@@ -45,6 +45,8 @@ interface Controller extends TutorialPark {
   chestsAway(list: number[]): void;
   chestFree(i: number): boolean;
   chestMissed(): void;
+  chestWork(i: number): boolean;
+  chestStop(): void;
   emoteRemote(pid: number, id: string): void;
   sayRemote(pid: number, text: string): void;
   prankTarget(): (Who & { calm: boolean }) | null;
@@ -70,6 +72,7 @@ const TUT_KEY = 'anglog-park-tutorial';
 const PEP_KEY = 'anglog-pepero-found';
 const PEP_GOAL = 5;
 const BOX_BACK_MS = 10_000; // realtime park/Channel.BOX_BACK_MS, for playing alone
+const OPEN_MS = 1500; // how long opening a box takes (the bar fills meanwhile)
 const DOOR_TIP_KEY = 'anglog-park-door-tip';
 const VIEW_KEY = 'anglog-park-view';
 const CALM_KEY = 'anglog-park-calm';
@@ -177,6 +180,11 @@ export function ParkPage() {
   const [pepReward, setPepReward] = useState(false);
   const localBoxes = useRef<number[]>([]);
   const boxWait = useRef(0);
+  // opening a box: which one, while the bar fills. Moving away or someone else being first stops it
+  const [opening, setOpening] = useState(-1);
+  const openingRef = useRef(-1);
+  openingRef.current = opening;
+  const openTimer = useRef(0);
   const baseBird = myBird ?? guest;
   const visitor = { ...baseBird, wear };
   const visitorRef = useRef(visitor);
@@ -200,8 +208,23 @@ export function ParkPage() {
   const gotPeperoRef = useRef(gotPepero);
   gotPeperoRef.current = gotPepero;
   // the server decides who gets a box; alone (no server, or not connected) this page does
-  const openChest = () => {
+  const startOpening = () => {
     const i = chestAt;
+    if (i < 0 || opening >= 0 || !ctl.current?.chestWork(i)) return;
+    setOpening(i);
+    window.clearTimeout(openTimer.current);
+    openTimer.current = window.setTimeout(() => {
+      ctl.current?.chestStop();
+      setOpening(-1);
+      openChest(i);
+    }, OPEN_MS);
+  };
+  const stopOpening = () => {
+    window.clearTimeout(openTimer.current);
+    ctl.current?.chestStop();
+    setOpening(-1);
+  };
+  const openChest = (i: number) => {
     const c = ctl.current;
     if (i < 0 || !c) return;
     if (net.current && status === 'online') {
@@ -223,7 +246,12 @@ export function ParkPage() {
     gotPepero();
     localBoxes.current.push(window.setTimeout(() => ctl.current?.chestBack(i), BOX_BACK_MS));
   };
-  useEffect(() => () => { localBoxes.current.forEach(clearTimeout); window.clearTimeout(boxWait.current); }, []);
+  useEffect(() => () => { localBoxes.current.forEach(clearTimeout); window.clearTimeout(boxWait.current); window.clearTimeout(openTimer.current); }, []);
+  // walked off, or the box is gone (someone else opened it): stop opening
+  useEffect(() => {
+    if (opening >= 0 && chestAt !== opening) stopOpening();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chestAt]);
 
   const netLook: NetLook = { name: visitor.name, species: visitor.species, colors: visitor.colors, home: myBird && me ? me.handle : null, wear };
   const lookRef = useRef(netLook);
@@ -376,6 +404,7 @@ export function ParkPage() {
       prankNo: (_to, why) => setToast(PRANK_NO[why] ?? tr('지금은 장난칠 수 없어요.', 'No pranks right now.')),
       box(i, mine) {
         if (mine) { window.clearTimeout(boxWait.current); boxWait.current = 0; }
+        if (!mine && openingRef.current === i) setToast(tr('다른 앵무가 먼저 열었어요!', 'Another bird got there first!'));
         if (!ctl.current?.chestFree(i)) return;
         ctl.current.chestOpened(i, mine);
         if (mine) gotPeperoRef.current();
@@ -553,7 +582,10 @@ export function ParkPage() {
         </div>
       )}
       {chestAt >= 0 && zone === 'pepero' && !sheet && (
-        <button className="park-open-box" onClick={openChest}>{tr('상자 열기', 'Open the box')}</button>
+        <button className={opening >= 0 ? 'park-open-box opening' : 'park-open-box'} onClick={startOpening} aria-busy={opening >= 0}>
+          {opening >= 0 && <span className="park-open-fill" style={{ animationDuration: `${OPEN_MS}ms` }} aria-hidden="true" />}
+          <span className="park-open-label">{opening >= 0 ? tr('상자 여는 중...', 'Opening...') : tr('상자 열기', 'Open the box')}</span>
+        </button>
       )}
       {pepReward && (
         <div className="park-tut done" role="dialog" aria-label={tr('빼빼로 찾기 완료', 'Pepero found')}>
