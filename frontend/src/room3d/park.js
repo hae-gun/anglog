@@ -1125,6 +1125,101 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     obstacles.push({ x: pos.x, z: pos.z, r: 1.5, h: 2.9 });
   }
 
+  // ---- grass tufts that sway in the wind (?grass=0 turns them off) --------------------------
+  // Low-poly clumps of a few blades, drawn instanced in chunks so the ones behind the camera are
+  // skipped. The sway runs in the vertex shader: nothing per tuft on the CPU, and no shadows cast.
+  const grassTime = { value: 0 };
+  if (q.get('grass') !== '0') {
+    const gr = mulberry(2026);
+    // one tuft: five tapered blades leaning out from the middle, dark at the root, light at the tip
+    const pos = [], cols = [];
+    const root = new THREE.Color(env.night ? '#46532F' : '#7E9A4C'), tipC = new THREE.Color(env.night ? '#6E7A44' : '#C2D27A');
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + gr() * 0.5, lean = 0.18 + gr() * 0.2, h = 0.55 + gr() * 0.45, w = 0.07;
+      const ox = Math.cos(a) * 0.09, oz = Math.sin(a) * 0.09;
+      const px = -Math.sin(a) * w, pz = Math.cos(a) * w;
+      const tx = ox + Math.cos(a) * lean, tz = oz + Math.sin(a) * lean;
+      pos.push(ox - px, 0, oz - pz, ox + px, 0, oz + pz, tx, h, tz);
+      const r0 = root.clone().convertSRGBToLinear(), t0 = tipC.clone().convertSRGBToLinear();
+      cols.push(r0.r, r0.g, r0.b, r0.r, r0.g, r0.b, t0.r, t0.g, t0.b);
+    }
+    const tuft = new THREE.BufferGeometry();
+    tuft.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    tuft.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    tuft.computeVertexNormals();
+    // normals straight up: blades lit like the lawn under them, from both sides
+    const nrm = tuft.attributes.normal;
+    for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, 0, 1, 0);
+    const grassMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide });
+    grassMat.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = grassTime;
+      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          vec2 wp = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+          float bend = transformed.y * transformed.y;
+          float gust = sin(uTime * 1.3 + wp.x * 0.21 + wp.y * 0.13) * 0.5 + 0.5;
+          float flutter = sin(uTime * 3.1 + wp.x * 1.7 + wp.y * 2.3);
+          transformed.x += bend * (0.10 + 0.22 * gust + 0.05 * flutter);
+          transformed.z += bend * (0.04 * flutter + 0.08 * gust);
+        }`);
+    };
+    // where tufts grow: lawn and meadow, never on paths, water, trunks or houses
+    const onPath = (x, z) => {
+      const r = Math.hypot(x, z);
+      if (r < 5.6 || (r > RING_IN - 0.3 && r < RING_OUT + 0.3)) return true;
+      if (r < PARK_R && PATH_A.some((pa) => { const ux = Math.cos(pa), uz = Math.sin(pa), along = x * ux + z * uz; return along > 0 && Math.abs(-x * uz + z * ux) < 1.25; })) return true;
+      return nearTrail(x, z).d < TRAIL_HALF + 0.35;
+    };
+    const ok = (x, z) => {
+      const r = Math.hypot(x, z);
+      if (r > PARK_R + 5 && nearTrail(x, z).d > 7) return false;
+      if (onPath(x, z) || waterAt(x, z)) return false;
+      if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 0.8) return false;
+      if (BEACHES.some((b) => Math.hypot(x - b.x, z - b.z) < b.r)) return false;
+      if (z < riverZ(x) + RIVER_W + 0.6) return false;
+      if (PILES.some((p) => Math.hypot(x - p.x, z - p.z) < 1.5)) return false;
+      return !obstacles.some((o) => !o.air && Math.hypot(x - o.x, z - o.z) < o.r + 0.25);
+    };
+    const want = Math.round((small ? 14000 : 34000) * (snowy ? 0.35 : 1));
+    const CH = 12; // chunk size
+    const chunks = new Map();
+    for (let tries = 0, n = 0; n < want && tries < want * 4; tries++) {
+      // mostly inside the park, some along the trail
+      let x, z;
+      if (gr() < 0.78) { const a = gr() * Math.PI * 2, r = Math.sqrt(gr()) * (PARK_R + 3); x = Math.cos(a) * r; z = Math.sin(a) * r; }
+      else { const t = trailPts[Math.floor(gr() * trailPts.length)], a = gr() * Math.PI * 2, r = TRAIL_HALF + 0.4 + gr() * 6; x = t.x + Math.cos(a) * r; z = t.z + Math.sin(a) * r; }
+      if (!ok(x, z)) continue;
+      const key = `${Math.floor(x / CH)},${Math.floor(z / CH)}`;
+      if (!chunks.has(key)) chunks.set(key, []);
+      chunks.get(key).push([x, z, gr() * Math.PI * 2, (0.17 + gr() * 0.12) * (snowy ? 0.8 : 1)]);
+      n++;
+    }
+    const tint0 = new THREE.Color();
+    chunks.forEach((list, key) => {
+      const [cx, cz] = key.split(',').map(Number);
+      const g = tuft.clone();
+      // instances are placed in world space, so the chunk's bounds are where the chunk is
+      g.boundingSphere = new THREE.Sphere(new THREE.Vector3((cx + 0.5) * CH, 0.2, (cz + 0.5) * CH), CH * 0.75);
+      const m = new THREE.InstancedMesh(g, grassMat, list.length);
+      list.forEach(([x, z, ry, sc], i) => {
+        dummy.position.set(x, 0, z);
+        dummy.rotation.set(0, ry, 0);
+        dummy.scale.set(sc * 1.6, sc, sc * 1.6);
+        dummy.updateMatrix();
+        m.setMatrixAt(i, dummy.matrix);
+        // a little colour variety: drier near paths, greener in the shade of the park
+        const k = gr();
+        tint0.setRGB(1, 1, 1);
+        if (snowy) tint0.set('#E6ECEF');
+        else if (k < 0.18) tint0.set('#E8D27A');
+        else if (k < 0.5) tint0.set('#D9EBB8');
+        m.setColorAt(i, tint0.convertSRGBToLinear());
+      });
+      m.receiveShadow = !small;
+      scene.add(m);
+    });
+  }
+
   // ---- ground rules ------------------------------------------------------------------------
   /** On foot you can be in the park, on the trail, or on a beach (and a little way into the water there). */
   function walkable(x, z) {
@@ -2346,6 +2441,7 @@ export function mountPark(container, cards, { visitor, startAt = null, onEnter, 
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     clock += dt;
+    grassTime.value = clock;
     if (pep && pep.zoneOf(player.pos) !== zoneNow) {
       zoneNow = pep.zoneOf(player.pos);
       if (onZone) onZone(zoneNow);
