@@ -189,13 +189,34 @@ function compact(obj) {
   });
 }
 
+// the 합격 label on the headband: one texture for every bird
+let headbandMat = null;
+function headbandLabel() {
+  if (headbandMat) return headbandMat;
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 56;
+  const g = c.getContext('2d');
+  g.fillStyle = '#FFFDF6';
+  g.fillRect(0, 0, 128, 56);
+  g.fillStyle = '#C62F3C';
+  g.font = 'bold 44px sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('합격', 64, 30);
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  headbandMat = new THREE.MeshBasicMaterial({ map: tex });
+  return headbandMat;
+}
+
 /**
  * Builds a bird. Returns { group, pose(mood, t), size }.
  * group is for the caller to place, turn and scale (1 = normal); the species size sits inside it.
  */
 export function makeBird(colors, species, wear = []) {
   const c = colors;
-  // what the bird has on (lib/wardrobe.ts): "scarf:#47B3A6" (an item with a colour) or "pepero"
+  // what the bird has on (lib/wardrobe.ts): "scarf:#47B3A6" (an item with a colour), "headband" or "pepero"
   const worn = {};
   (wear || []).forEach((w) => { const [id, col] = String(w).split(':'); worn[id] = col || true; });
   const scarfC = typeof worn.scarf === 'string' ? worn.scarf : null;
@@ -384,6 +405,29 @@ export function makeBird(colors, species, wear = []) {
     [-1, 1].forEach((s) => blob(head, '#FF9C9C', 0.2, -0.02, 0.27 * s, 0.075, 0.045, 0.03));
   }
 
+  // 합격 머리띠 (the 수능 응원 파크 prize): a white band round the forehead, 합격 in red on the front,
+  // and two short tails tied at the back of the head
+  if (worn.headband) {
+    const band = new THREE.Group();
+    band.position.set(0.0, 0.23, 0);
+    band.rotation.z = -0.12;
+    head.add(band);
+    const white = toon('#FFFDF6');
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.045, 6, 28), white);
+    ring.rotation.x = Math.PI / 2;
+    ring.scale.set(1.06, 0.98, 1);
+    band.add(ring);
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.095), headbandLabel());
+    label.position.set(0.42, 0.005, 0);
+    label.rotation.y = Math.PI / 2;
+    band.add(label);
+    [-1, 1].forEach((s) => {
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.07), white);
+      tail.position.set(-0.4, -0.08, 0.06 * s);
+      tail.rotation.set(0.35 * s, 0, -0.45);
+      band.add(tail);
+    });
+  }
   // hooked beak: the upper half curls down over a small lower half
   const [beakC, beakK] = S.beak;
   const beak = new THREE.Group();
@@ -391,7 +435,7 @@ export function makeBird(colors, species, wear = []) {
   head.add(beak);
   blob(beak, shade(beakC, 0.86), 0.03, -0.075 * beakK, 0, 0.07 * beakK, 0.05 * beakK, 0.065 * beakK, -0.3, LW * 0.7, SPH_LO);
   blob(beak, beakC, 0.02, 0, 0, 0.13 * beakK, 0.1 * beakK, 0.09 * beakK, -0.35, LW * 0.7, BEAK);
-  // a 빼빼로 held crosswise in the beak (the 빼빼로 숲 event prize). Only held: chocolate is poison to parrots
+  // a 빼빼로 held crosswise in the beak (the prize of the November 2026 빼빼로 숲 event, now over). Only held: chocolate is poison to parrots
   if (worn.pepero) {
     const stick = new THREE.Group();
     stick.position.set(0.05 * beakK, -0.045 * beakK, 0.05);

@@ -430,8 +430,8 @@ html[lang="en"] .park-plate.lit::after { content: 'New today'; }
 .admin-event-form { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .admin-check { display: flex; gap: 6px; align-items: center; font-size: 14px; }
 .admin-msg { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--leaf-soft); font-size: 14px; }
-/* 빼빼로 숲 event: a chocolate-dipped chip */
-.park-pepero { background: linear-gradient(90deg, #E3B574 0 22%, #5A3322 22% 100%); color: #FFF6EA; border-color: #3A2418; }
+/* 수능 응원 파크 event: a red-and-white cheering chip */
+.park-cheer { background: #FFFDF6; color: #C62F3C; border: 2px solid #C62F3C; font-weight: 700; }
 
 /* ---- 첫 산책(튜토리얼): 모란이 안내 카드 ---- */
 .park-tut { position: absolute; z-index: 5; left: 8px; right: 8px; top: calc(56px + env(safe-area-inset-top, 0px)); margin: 0 auto; max-width: 440px; padding: 4px 6px; animation: prank-in 0.25s ease-out;
@@ -466,10 +466,11 @@ html[lang="en"] .park-plate.lit::after { content: 'New today'; }
 .wardrobe-lock { white-space: nowrap; }
 .wardrobe-icon { width: 34px; height: 34px; flex: none; border-radius: 10px; border: 2px solid var(--ink); background: #EEE6D6; position: relative; }
 .wardrobe-icon.scarf::after { content: ''; position: absolute; left: 6px; right: 6px; top: 13px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.55); }
+.wardrobe-icon.headband { background: radial-gradient(circle at 50% 50%, #C62F3C 0 14%, transparent 15%), linear-gradient(180deg, transparent 36%, #FFFFFF 36%, #FFFFFF 64%, transparent 64%), #F6E3C8; box-shadow: inset 0 0 0 1px #E2C9A6; }
 .wardrobe-icon.pepero { background: linear-gradient(135deg, transparent 40%, #5A3322 40%, #5A3322 58%, transparent 58%), linear-gradient(135deg, #FFF3C4 0 100%); }
 .wardrobe-item.locked .wardrobe-icon { filter: grayscale(1); }
 
-/* ---- 빼빼로 찾기 ---- */
+/* ---- 응원 별 찾기 (event boxes) ---- */
 .park-quest { top: calc(104px + env(safe-area-inset-top, 0px)); }
 .park-open-box { position: absolute; z-index: 6; left: 50%; bottom: calc(190px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 14px 26px; border: 2px solid var(--ink); border-radius: 999px; background: #F2C94C; box-shadow: 3px 3px 0 var(--ink); font: 19px/1 var(--display); color: var(--ink); animation: box-bob 1s ease-in-out infinite; touch-action: manipulation; }
 @keyframes box-bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -5px); } }

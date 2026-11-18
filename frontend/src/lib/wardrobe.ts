@@ -1,11 +1,11 @@
 import { tr } from '../i18n';
 
 // 옷장: 앵파크에서 받은 꾸미기 아이템과, 지금 입고 있는 것. 이 기기에만 기억한다.
-// 입은 것은 "scarf:#47B3A6"이나 "pepero" 같은 짧은 글로 실시간 서버를 거쳐 다른 사람 화면에도 보인다
+// 입은 것은 "scarf:#47B3A6"이나 "headband" 같은 짧은 글로 실시간 서버를 거쳐 다른 사람 화면에도 보인다
 // (서버는 모양만 확인해서, 새 아이템을 넣을 때 서버는 바꾸지 않아도 된다. 모델은 room3d/bird.js).
 // 새 아이템: ITEMS에 한 줄, bird.js의 worn.<id>에 모양 한 덩어리.
 
-export type ItemId = 'scarf' | 'pepero';
+export type ItemId = 'scarf' | 'pepero' | 'headband';
 
 export interface ItemDef {
   id: ItemId;
@@ -14,11 +14,15 @@ export interface ItemDef {
   how: () => string;
   /** an item that comes in a colour picked when it is given */
   colored?: boolean;
+  /** from an event that is over: only shown to birds that already have it */
+  retired?: boolean;
 }
 
 export const ITEMS: ItemDef[] = [
   { id: 'scarf', name: () => tr('털실 목도리', 'Knitted scarf'), how: () => tr('모란이와 첫 산책을 끝내면 받아요', 'Finish the first walk with Moran'), colored: true },
-  { id: 'pepero', name: () => tr('빼빼로 물기', 'Pepero in the beak'), how: () => tr('11월 빼빼로 숲에서 상자를 열어 빼빼로 5개를 찾으면 받아요', 'Find 5 Pepero in the boxes of the November Pepero Forest') },
+  { id: 'headband', name: () => tr('합격 머리띠', 'Good-luck headband'), how: () => tr('수능 응원 파크에서 상자를 열어 응원 별 5개를 모으면 받아요', 'Collect 5 cheer stars from the boxes in the Exam Cheer Park') },
+  // 2026년 11월 빼빼로 숲 이벤트(끝남). 받은 앵무는 계속 입을 수 있다
+  { id: 'pepero', name: () => tr('빼빼로 물기', 'Pepero in the beak'), how: () => tr('빼빼로 숲 이벤트에서 받던 아이템이에요', 'From the Pepero Forest event'), retired: true },
 ];
 
 interface Owned { color?: string }
@@ -83,7 +87,7 @@ export function setWorn(id: ItemId, on: boolean): Store {
   return s;
 }
 
-/** What the bird shows, as sent to the park and to bird.js: ["scarf:#47B3A6", "pepero"]. */
+/** What the bird shows, as sent to the park and to bird.js: ["scarf:#47B3A6", "headband"]. */
 export function wearList(s: Store): string[] {
   return s.worn.map((id) => (s.owned[id]?.color ? `${id}:${s.owned[id]!.color}` : id));
 }

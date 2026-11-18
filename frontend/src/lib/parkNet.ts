@@ -11,7 +11,7 @@ export interface NetLook {
   colors: ParrotColors;
   /** the 앵로그 handle of a logged-in bird owner, so others can visit the house */
   home?: string | null;
-  /** what it has on (lib/wardrobe.ts wearList), e.g. ["scarf:#47B3A6", "pepero"] */
+  /** what it has on (lib/wardrobe.ts wearList), e.g. ["scarf:#47B3A6", "headband"] */
   wear?: string[];
 }
 export interface NetState {
@@ -51,7 +51,7 @@ export interface NetHandlers {
   answer(from: number, to: number, a: number, toMe: boolean): void;
   calm(pid: number, on: boolean): void;
   prankNo(to: number, why: PrankNo): void;
-  /** 빼빼로 숲 boxes: opened by someone (mine: by me), come back, or someone else was first */
+  /** event boxes (응원 별 찾기): opened by someone (mine: by me), come back, or someone else was first */
   box(i: number, mine: boolean): void;
   boxBack(i: number): void;
   boxNo(i: number): void;
@@ -66,7 +66,7 @@ export interface NetClient {
   prank(to: number, k: number): void;
   answer(to: number, a: number): void;
   setCalm(on: boolean): void;
-  /** Try to open 빼빼로 숲 box i; the server answers in the next presence (or with boxNo). */
+  /** Try to open event box i; the server answers in the next presence (or with boxNo). */
   openBox(i: number): void;
   close(): void;
 }

@@ -27,9 +27,9 @@ interface Controller extends TutorialPark {
   chirp(): void;
   snack(): 'ok' | 'wait' | 'busy';
   weather: 'rain' | 'snow' | 'clear';
-  /** The 빼빼로 숲 event space is open today. */
-  pepero: boolean;
-  travel(): 'park' | 'pepero' | null;
+  /** The event space (수능 응원 파크) is open today. */
+  cheer: boolean;
+  travel(): 'park' | 'cheer' | null;
   say(text: string): void;
   playTogether(): string | null;
   enter(handle: string): boolean;
@@ -68,9 +68,9 @@ const INVITE_KEY = 'anglog-invite-seen';
 const INVITE_AFTER_MS = 3 * 60 * 1000;
 const BIRD_KEY = 'anglog-park-bird';
 const TUT_KEY = 'anglog-park-tutorial';
-// 빼빼로 찾기(11월 빼빼로 숲): 상자에서 찾은 빼빼로 수(이 기기), 다 모으면 빼빼로 물기
-const PEP_KEY = 'anglog-pepero-found';
-const PEP_GOAL = 5;
+// 응원 별 찾기(수능 응원 파크): 상자에서 찾은 별 수(이 기기), 다 모으면 합격 머리띠
+const STAR_KEY = 'anglog-cheer-stars';
+const STAR_GOAL = 5;
 const BOX_BACK_MS = 10_000; // realtime park/Channel.BOX_BACK_MS, for playing alone
 const OPEN_MS = 1500; // how long opening a box takes (the bar fills meanwhile)
 const DOOR_TIP_KEY = 'anglog-park-door-tip';
@@ -153,7 +153,7 @@ export function ParkPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
   const [flying, setFlying] = useState(false);
-  const [zone, setZone] = useState<null | 'park' | 'pepero'>(null); // null: no 빼빼로 숲 today
+  const [zone, setZone] = useState<null | 'park' | 'cheer'>(null); // null: no event space today
   const [status, setStatus] = useState<NetStatus | null>(null);
   // bumped by "여기서 다시 놀기" after another tab or device took my bird
   const [netRound, setNetRound] = useState(0);
@@ -175,9 +175,9 @@ export function ParkPage() {
   const wear = wearList(wardrobe);
   const wardrobeRef = useRef(wardrobe);
   wardrobeRef.current = wardrobe;
-  const [pepFound, setPepFound] = useState(() => Number(readKey(PEP_KEY)) || 0);
+  const [starFound, setStarFound] = useState(() => Number(readKey(STAR_KEY)) || 0);
   const [chestAt, setChestAt] = useState(-1);
-  const [pepReward, setPepReward] = useState(false);
+  const [starReward, setStarReward] = useState(false);
   const localBoxes = useRef<number[]>([]);
   const boxWait = useRef(0);
   // opening a box: which one, while the bar fills. Moving away or someone else being first stops it
@@ -193,20 +193,20 @@ export function ParkPage() {
   const mountedKey = useRef('');
   const viewRef = useRef(view);
   viewRef.current = view;
-  // 빼빼로 찾기: one more found. The fifth one gives the 빼빼로 물기 item (and puts it on)
-  const pepFoundRef = useRef(pepFound);
-  const gotPepero = () => {
-    const next = pepFoundRef.current + 1;
-    pepFoundRef.current = next;
-    setPepFound(next);
-    writeKey(PEP_KEY, String(next));
-    if (next >= PEP_GOAL && !wardrobeRef.current.owned.pepero) {
-      setWardrobe(giveItem('pepero'));
-      setPepReward(true);
+  // 응원 별 찾기: one more found. The fifth one gives the 합격 머리띠 (and puts it on)
+  const starFoundRef = useRef(starFound);
+  const gotStar = () => {
+    const next = starFoundRef.current + 1;
+    starFoundRef.current = next;
+    setStarFound(next);
+    writeKey(STAR_KEY, String(next));
+    if (next >= STAR_GOAL && !wardrobeRef.current.owned.headband) {
+      setWardrobe(giveItem('headband'));
+      setStarReward(true);
     }
   };
-  const gotPeperoRef = useRef(gotPepero);
-  gotPeperoRef.current = gotPepero;
+  const gotStarRef = useRef(gotStar);
+  gotStarRef.current = gotStar;
   // the server decides who gets a box; alone (no server, or not connected) this page does
   const startOpening = () => {
     const i = chestAt;
@@ -243,7 +243,7 @@ export function ParkPage() {
     const c = ctl.current;
     if (!c || !c.chestFree(i)) return;
     c.chestOpened(i, true);
-    gotPepero();
+    gotStar();
     localBoxes.current.push(window.setTimeout(() => ctl.current?.chestBack(i), BOX_BACK_MS));
   };
   useEffect(() => () => { localBoxes.current.forEach(clearTimeout); window.clearTimeout(boxWait.current); window.clearTimeout(openTimer.current); }, []);
@@ -302,7 +302,7 @@ export function ParkPage() {
         startAt: startAt.current,
         onEnter: (handle: string) => navigate(`/play/${handle}`),
         onBirdTap: (who: BirdPop) => setBird(who),
-        onZone: (z: 'park' | 'pepero') => setZone(z),
+        onZone: (z: 'park' | 'cheer') => setZone(z),
         onChest: (i: number) => setChestAt(i),
         onTutorial: (e: 'chorus' | 'pranked' | 'nearDoor') => {
           if (e !== 'nearDoor') { tutEvents.current.dispatchEvent(new Event(e)); return; }
@@ -326,7 +326,7 @@ export function ParkPage() {
               : tr('앵로그에 우리 앵무를 등록하면 여기에 집이 생겨요.', 'Add your parrot on Anglog and your house goes up here.')),
       }) as unknown as Controller;
       ctl.current = c;
-      setZone(c.pepero ? 'park' : null);
+      setZone(c.cheer ? 'park' : null);
       mountedKey.current = visitorKey;
       if (viewRef.current === 'first') c.setView('first');
       others.current.forEach((p) => { c.addRemote(p.pid, p.look, p); });
@@ -407,7 +407,7 @@ export function ParkPage() {
         if (!mine && openingRef.current === i) setToast(tr('다른 앵무가 먼저 열었어요!', 'Another bird got there first!'));
         if (!ctl.current?.chestFree(i)) return;
         ctl.current.chestOpened(i, mine);
-        if (mine) gotPeperoRef.current();
+        if (mine) gotStarRef.current();
       },
       boxBack: (i) => ctl.current?.chestBack(i),
       boxNo() {
@@ -558,8 +558,8 @@ export function ParkPage() {
         {tudak && <span className="play-chip park-tudak" title={tr('오늘 가장 많이 투닥거린 앵무', 'The bird you squabbled with most today')}>{tr(`투닥 친구 ${tudak.name} ${tudak.n}번`, `Rival ${tudak.name} x${tudak.n}`)}</span>}
         <span className="grow" />
         {zone && (
-          <button className="play-chip park-pepero" onClick={() => ctl.current?.travel()}>
-            {zone === 'pepero' ? tr('공원으로 돌아가기', 'Back to the park') : tr('빼빼로 숲 가기', 'Pepero Forest')}
+          <button className="play-chip park-cheer" onClick={() => ctl.current?.travel()}>
+            {zone === 'cheer' ? tr('공원으로 돌아가기', 'Back to the park') : tr('수능 응원 파크 가기', 'Exam Cheer Park')}
           </button>
         )}
         {parrots.length > 1 && (
@@ -572,30 +572,30 @@ export function ParkPage() {
       {error && hint && <p className="play-note park-note" role="alert">{error}</p>}
       {broken && <p className="play-note park-note">{tr('이 기기에서는 3D 앵파크를 열 수 없어요. 집 목록으로 놀러가 주세요.', 'This device cannot open the 3D park. Visit houses from the list instead.')}</p>}
       {!rooms && !error && <p className="park-hint">{tr('앵파크 문 여는 중', 'Opening the park')}</p>}
-      {zone === 'pepero' && !wardrobe.owned.pepero && !pepReward && (
+      {zone === 'cheer' && !wardrobe.owned.headband && !starReward && (
         <div className="park-tut park-quest" role="status" aria-live="polite">
           <div className="park-tut-head">
-            <span className="park-tut-n">{Math.min(pepFound, PEP_GOAL)}/{PEP_GOAL}</span>
-            <b>{tr('빼빼로 찾기', 'Find the Pepero')}</b>
+            <span className="park-tut-n">{Math.min(starFound, STAR_GOAL)}/{STAR_GOAL}</span>
+            <b>{tr('응원 별 찾기', 'Find the cheer stars')}</b>
           </div>
-          <p>{tr('반짝이는 상자를 열어 빼빼로를 찾으세요. 상자는 10초 뒤에 다시 생기고, 먼저 연 앵무만 가져가요.', 'Open the sparkling boxes to find Pepero. A box comes back after 10 seconds, and only the first bird gets it.')}</p>
+          <p>{tr('트랙 위 반짝이는 상자를 열어 응원 별을 모으세요. 상자는 10초 뒤에 다시 생기고, 먼저 연 앵무만 가져가요.', 'Open the sparkling boxes on the track to collect cheer stars. A box comes back after 10 seconds, and only the first bird gets it.')}</p>
         </div>
       )}
-      {chestAt >= 0 && zone === 'pepero' && !sheet && (
+      {chestAt >= 0 && zone === 'cheer' && !sheet && (
         <button className={opening >= 0 ? 'park-open-box opening' : 'park-open-box'} onClick={startOpening} aria-busy={opening >= 0}>
           {opening >= 0 && <span className="park-open-fill" style={{ animationDuration: `${OPEN_MS}ms` }} aria-hidden="true" />}
           <span className="park-open-label">{opening >= 0 ? tr('상자 여는 중...', 'Opening...') : tr('상자 열기', 'Open the box')}</span>
         </button>
       )}
-      {pepReward && (
-        <div className="park-tut done" role="dialog" aria-label={tr('빼빼로 찾기 완료', 'Pepero found')}>
+      {starReward && (
+        <div className="park-tut done" role="dialog" aria-label={tr('응원 별 찾기 완료', 'Cheer stars found')}>
           <div className="park-tut-head">
-            <span className="wardrobe-icon pepero" aria-hidden="true" />
-            <b>{tr('빼빼로 5개를 다 찾았어요! 빼빼로를 물었어요', 'All 5 found! Your bird holds a Pepero')}</b>
+            <span className="wardrobe-icon headband" aria-hidden="true" />
+            <b>{tr('응원 별 5개를 다 모았어요! 합격 머리띠를 둘렀어요', 'All 5 stars! Your bird wears a good-luck headband')}</b>
           </div>
-          <p>{tr('초콜릿은 앵무에게 독이라 물고만 있어요. 옷장에서 벗고 입을 수 있어요.', 'Chocolate is poison to parrots, so it only holds it. Take it off or put it on in the wardrobe.')}</p>
+          <p>{tr('수험생들에게 좋은 기운이 가길! 옷장에서 벗고 입을 수 있어요.', 'Good luck to everyone taking the exam! Take it off or put it on in the wardrobe.')}</p>
           <div className="row">
-            <button className="btn small primary" onClick={() => setPepReward(false)}>{tr('좋아요', 'Nice')}</button>
+            <button className="btn small primary" onClick={() => setStarReward(false)}>{tr('좋아요', 'Nice')}</button>
           </div>
         </div>
       )}
@@ -746,7 +746,7 @@ export function ParkPage() {
                 <h2 className="section-title">{tr('옷장', 'Wardrobe')}</h2>
                 <p className="lede">{tr('받은 아이템을 입고 벗을 수 있어요. 입은 모습은 다른 앵무들 화면에도 보여요.', 'Put on or take off what you have got. Other birds see it too.')}</p>
                 <div className="wardrobe">
-                  {ITEMS.map((it) => {
+                  {ITEMS.filter((it) => !it.retired || wardrobe.owned[it.id]).map((it) => {
                     const owned = wardrobe.owned[it.id];
                     const on = wardrobe.worn.includes(it.id);
                     return (
